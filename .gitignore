@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# ---- Local tool state (should NOT be pushed) ----
+.claude/
+.cursor/
+.claude-code-harness-version
+
+# ---- Old backups ----
+*.backup-*
+Plans.md.backup-*
+
+# ---- Ad-hoc test artifacts at project root ----
+/test_input.pdf
+/test_output*.pdf
+/gca_primer_project_presentation.pdf
+
+# ---- Release artifacts ----
+deploy/packages/*.zip
+/配布用.zip

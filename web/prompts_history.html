@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDFproject 作成プロンプト集</title>
+<style>
+  :root {
+    --bg: #faf9f7;
+    --card: #ffffff;
+    --text: #1f2328;
+    --muted: #656d76;
+    --accent: #8250df;
+    --border: #d8d4d0;
+    --code-bg: #f6f4f0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Hiragino Sans", "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    line-height: 1.75;
+  }
+  .container { max-width: 920px; margin: 0 auto; padding: 32px 24px; }
+  header {
+    background: linear-gradient(135deg, #8250df, #a371f7);
+    color: #fff;
+    padding: 40px 28px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 16px rgba(130,80,223,0.18);
+  }
+  header h1 { margin: 0 0 8px; font-size: 30px; }
+  header p { margin: 0; opacity: 0.95; }
+  .disclaimer {
+    background: #fff8c5;
+    border-left: 4px solid #d4a72c;
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-bottom: 28px;
+    font-size: 14px;
+  }
+  .disclaimer strong { color: #7d4e00; }
+  .phase {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 10px;
+  }
+  .phase-number {
+    background: var(--accent);
+    color: #fff;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .phase-title { margin: 0; font-size: 20px; }
+  .phase-meta {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  .prompt-block {
+    background: var(--code-bg);
+    border-left: 4px solid var(--accent);
+    padding: 14px 18px;
+    border-radius: 6px;
+    margin: 12px 0;
+    white-space: pre-wrap;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #24292f;
+  }
+  .label {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+  .label.review { background: #1f883d; }
+  .label.test { background: #bf8700; }
+  h3 { font-size: 15px; color: var(--text); margin: 18px 0 6px; }
+  .outcome {
+    background: #ddf4ff;
+    border-left: 4px solid #0969da;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .outcome strong { color: #0550ae; }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 24px;
+  }
+  code {
+    background: rgba(130,80,223,0.1);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 90%;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>PDFproject 作成プロンプト集</h1>
+    <p>2-Agent モード（Cursor PM + Claude Code Worker）で構築された開発履歴</p>
+  </header>
+
+  <div class="disclaimer">
+    <strong>⚠️ 注記</strong>: PDFproject の Claude Code 会話ログは <code>~/.claude/projects/</code> に保存されておらず、当時の生のプロンプトを完全な形で取得することはできません。
+    本ページは <code>Plans.md</code>、<code>decisions.md</code>、<code>CLAUDE.md</code>、<code>AGENTS.md</code> に記録された<strong>各フェーズの決定事項・成果物・設計方針</strong>を基に再構成した「再現プロンプト集」です。実際の対話と細部は異なる場合があります。<span style="color:#7d4e00;">（未検証 / Reconstructed）</span>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">0</div>
+      <h2 class="phase-title">プロジェクトセットアップ</h2>
+    </div>
+    <div class="phase-meta">2026-03-21 / 2-Agent モード基盤構築</div>
+
+    <span class="label">PM → Worker</span>
+    <div class="prompt-block">PDF操作ツール集を Python 3.13 で作りたい。
+既存の img2pdf.py を出発点として、以下を満たす新規プロジェクトを立ち上げてください。
+
+- 1機能=1ファイル構成
+- CLI 優先、GUI は --select-files フラグで tkinter ラッパー
+- pytest によるユニットテスト（カバレッジ80%以上）
+- 関数ベース実装（クラス不使用）
+- 型ヒント必須、docstring は複雑な関数のみ
+
+まず環境診断（Python バージョン、pypdf / tkinter の利用可否）を行い、
+requirements.txt と README.md の雛形を作成してください。</div>
+
+    <div class="outcome"><strong>成果</strong>: Python 3.13.5 / pypdf / tkinter 利用可能を確認。requirements.txt と AGENTS.md, CLAUDE.md, Plans.md の運用フレーム整備。</div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">1</div>
+      <h2 class="phase-title">PDF分割機能 (pdf_splitter.py)</h2>
+    </div>
+    <div class="phase-meta">2026-03-21 / フェーズ2</div>
+
+    <span class="label">PM → Worker</span>
+    <div class="prompt-block">pdf_splitter.py を新規作成してください。
+
+要件:
+- ページ範囲を "1-3,4-7" の形式で受け取る
+- コロン区切り "1:3 4:7" もサポート
+- 単一ページ "5" や混在 "1-3,5,7-9" にも対応
+- 出力ファイル名: input_p1-3.pdf / input_p5.pdf
+- --select-files で GUI モード
+- --verbose で詳細ログ
+
+img2pdf.py の構造（main() に argparse、GUI ラッパー）を踏襲してください。
+テストは tests/test_pdf_splitter.py に作成し、エッジケース（範囲外、不正な形式、空ファイル等）を網羅。</div>
+
+    <span class="label review">Worker → PM (handoff)</span>
+    <div class="prompt-block">/handoff-to-cursor
+
+実装完了:
+- pdf_splitter.py (約280行)
+- tests/test_pdf_splitter.py (21テスト全成功)
+
+確認ポイント:
+1. ページ範囲パーサーの実装（parse_ranges 関数）
+2. 出力ファイル名の命名規則
+3. --select-files の挙動（複数範囲入力 UI）</div>
+
+    <div class="outcome"><strong>成果</strong>: 21テスト合格、CLI/GUI 両モード動作確認。</div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">2</div>
+      <h2 class="phase-title">PDF結合機能 (pdf_merger.py)</h2>
+    </div>
+    <div class="phase-meta">2026-03-21 / フェーズ3</div>
+
+    <span class="label">PM → Worker</span>
+    <div class="prompt-block">pdf_merger.py を作成してください。
+
+要件:
+- 2ファイル以上を必須とする（1ファイルだけならエラー）
+- 入力順序がそのまま結合順序
+- ワイルドカード対応 (chapter*.pdf)
+- --select-files で複数ファイル選択 GUI
+- pdf_splitter.py と同じスタイル / 同じパターンで
+
+エラーハンドリング:
+- 入力ファイルが PDF でない場合
+- ファイルが破損している場合
+- 出力先に書き込めない場合
+
+すべて pytest で検証してください。</div>
+
+    <div class="outcome"><strong>成果</strong>: 19テスト合格。pypdf.PdfWriter による単純結合実装。</div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">3</div>
+      <h2 class="phase-title">PDFページ操作 (pdf_edit.py)</h2>
+    </div>
+    <div class="phase-meta">2026-03-21 / フェーズ4</div>
+
+    <span class="label">PM → Worker</span>
+    <div class="prompt-block">pdf_edit.py を作成してください。3つの操作を1つのツールに統合します。
+
+1. --delete "1,3,5-7"          ページ削除
+2. --reorder "3,1,2,4-10"      ページ並べ替え（全ページ指定必須）
+3. --insert "src.pdf:1-3@5"    別PDFから挿入
+
+複数操作を同じコマンドで組み合わせ可能にしてください:
+  python3 pdf_edit.py input.pdf --delete "1,5" --reorder "2,1,3-10" -o out.pdf
+
+操作の適用順は: delete → reorder → insert で固定。
+各操作のパース関数を分離し、それぞれユニットテストを書いてください。</div>
+
+    <span class="label review">Worker のセルフレビュー観点</span>
+    <div class="prompt-block">/review
+
+- parse_delete_pages / parse_reorder / parse_insert の3関数が独立してテスト可能か
+- reorder で全ページ指定漏れがあれば明確なエラーを返すか
+- insert の "src.pdf:1-3@5" の @position が 1-indexed であることを README に明記したか
+- 削除→並べ替え→挿入の組み合わせ時、ページ番号がずれていないか</div>
+
+    <div class="outcome"><strong>成果</strong>: 23テスト合格。3操作の組み合わせ動作確認。</div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">4</div>
+      <h2 class="phase-title">PDFページ番号挿入 (pdf_page_number.py)</h2>
+    </div>
+    <div class="phase-meta">2026-03-21 / フェーズ5</div>
+
+    <span class="label">PM → Worker</span>
+    <div class="prompt-block">pdf_page_number.py を作成してください。reportlab でページ番号オーバーレイを生成し、pypdf でマージします。
+
+要件:
+- 6つの位置: top-left / top-center / top-right / bottom-left / bottom-center / bottom-right
+- フォーマット: "{page}", "{page}/{total}", "Page {page} of {total}", "第{page}ページ" 等
+- --skip-pages "1,2" で表紙・目次をスキップ
+- --start-number で開始番号（0 や任意の値）
+- --font-size でフォントサイズ
+- 日本語フォーマット対応（reportlab で CID フォント使用）
+
+エッジケース:
+- スキップページが全ページを超える場合
+- 開始番号が負の場合
+- フォントサイズが極端な値</div>
+
+    <div class="outcome"><strong>成果</strong>: 30テスト合格（最多）。日本語含む全フォーマット動作確認。</div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">5</div>
+      <h2 class="phase-title">PDFバッチ処理 (pdf_batch.py)</h2>
+    </div>
+    <div class="phase-meta">2026-03-21 / フェーズ6（最終）</div>
+
+    <span class="label">PM → Worker</span>
+    <div class="prompt-block">pdf_batch.py を作成し、ディレクトリ単位での一括処理を実現してください。
+
+サポートする操作:
+- add-page-numbers   既存の pdf_page_number ロジックを呼び出し
+- split              既存の pdf_splitter ロジックを呼び出し
+- delete             既存の pdf_edit の削除ロジックを呼び出し
+
+サブコマンド形式:
+  python3 pdf_batch.py add-page-numbers --input-dir ./pdfs --output-dir ./numbered ...
+  python3 pdf_batch.py split            --input-dir ./pdfs --output-dir ./split --ranges "1-5"
+  python3 pdf_batch.py delete           --input-dir ./pdfs --output-dir ./edited --delete-pages "1"
+
+要件:
+- 1ファイルが失敗しても処理を継続
+- 最後に成功/失敗のサマリーを表示
+- 失敗ファイルの理由を列挙
+- 既存ツールのロジックを再利用（コピペ禁止、import で）</div>
+
+    <span class="label test">Worker のテスト戦略</span>
+    <div class="prompt-block">tests/test_pdf_batch.py:
+
+- 3サブコマンドそれぞれの正常系
+- 入力ディレクトリが空 / 存在しない場合
+- 一部ファイルが破損している場合 → 継続 + サマリーで報告
+- サマリー出力の整形確認（Total / Success / Failed）
+- 既存ツールの import が正しく機能していること</div>
+
+    <div class="outcome"><strong>成果</strong>: 22テスト合格。<strong>全6フェーズ完了、合計112テスト全成功</strong>。</div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">+</div>
+      <h2 class="phase-title">追加: Web版エディタ (pdf_editor_app)</h2>
+    </div>
+    <div class="phase-meta">2026-04-05 〜 04-06 / バックログ外の追加実装</div>
+
+    <span class="label">PM → Worker</span>
+    <div class="prompt-block">CLI/GUI に加えて、ブラウザベースの PDF エディタを追加してください。
+
+構成:
+- pdf_editor_app/app.py            Flask アプリのエントリ
+- pdf_editor_app/api.py            REST API（PDF アップロード、操作、注釈）
+- pdf_editor_app/annotation_engine.py  注釈機能（ハイライト、テキスト追加など）
+- pdf_editor_app/pdf_operations.py  既存ツールへのファサード
+- pdf_editor_app/static/           フロントエンド HTML/JS
+
+起動方法:
+- run_editor.py をプロジェクト直下に配置
+- StartEditor.command でダブルクリック起動
+
+既存の pdf_splitter / pdf_merger / pdf_edit / pdf_page_number を import で再利用してください。</div>
+
+    <div class="outcome"><strong>成果</strong>: Flask ベースの Web エディタ追加。<code>StartEditor.command</code> でローカル起動可能に。</div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <div class="phase-number">★</div>
+      <h2 class="phase-title">運用ルール（プロジェクト全期間）</h2>
+    </div>
+
+    <h3>2-Agent ワークフローの基本コマンド</h3>
+    <div class="prompt-block">Cursor PM 側:
+  /start-session         セッション開始
+  /project-overview      プロジェクト概要確認
+  /plan-with-cc [要件]   実装計画作成
+  /handoff-to-claude     実装依頼
+  /review-cc-work        成果レビュー
+
+Claude Code Worker 側:
+  /work                  タスク実装
+  /review                セルフレビュー
+  /verify                ビルド・テスト検証
+  /handoff-to-cursor     完了報告</div>
+
+    <h3>共通の設計原則（決定事項）</h3>
+    <div class="prompt-block">- CLI 優先で実装し、GUI は --select-files フラグで起動するラッパー
+- 1機能 = 1ファイル
+- 関数ベース実装（クラスは原則使わない）
+- 全関数に型ヒント
+- docstring は複雑な関数のみ
+- pytest カバレッジ 80% 以上
+- main ブランチへの直接プッシュは PM のみ
+- AGENTS.md / CLAUDE.md の編集は PM のみ</div>
+
+    <h3>新機能追加時のテンプレート</h3>
+    <div class="prompt-block">[機能名] を pdf_xxx.py として追加してください。
+
+要件:
+1. 既存ツール（pdf_splitter.py 等）と同じスタイル
+2. CLI 優先、--select-files で GUI モード
+3. --verbose で詳細ログ
+4. -o / --output で出力先指定
+5. 主要オプションは README.md / USAGE_GUIDE.md にも追記
+
+テスト:
+- tests/test_pdf_xxx.py
+- 正常系・異常系・エッジケースを網羅
+- pytest --cov で 80% 以上を確認
+
+完了したら /handoff-to-cursor で報告してください。</div>
+  </div>
+
+  <footer>
+    Reconstructed from Plans.md / decisions.md / CLAUDE.md / AGENTS.md<br>
+    実際の Claude Code 対話ログは保存されていないため、本プロンプトは設計記録に基づく再現です（未検証）
+  </footer>
+</div>
+</body>
+</html>

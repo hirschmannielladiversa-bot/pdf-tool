@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF ツール 使い方ガイド</title>
+<style>
+:root {
+  --bg: #fafbfc;
+  --card: #ffffff;
+  --text: #1f2328;
+  --muted: #656d76;
+  --accent: #4a9eff;
+  --accent-dark: #0969da;
+  --warm: #fff8e1;
+  --warm-border: #f9c74f;
+  --code-bg: #f6f8fa;
+  --border: #d0d7de;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Hiragino Sans", "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.85;
+  font-size: 16px;
+  margin: 0;
+}
+.container {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+header {
+  background: linear-gradient(135deg, #4a9eff, #6dbcff);
+  color: #fff;
+  padding: 40px 32px;
+  border-radius: 14px;
+  margin-bottom: 32px;
+  box-shadow: 0 6px 20px rgba(74, 158, 255, 0.25);
+}
+header h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+  letter-spacing: 0.5px;
+}
+header p {
+  margin: 0;
+  font-size: 16px;
+  opacity: 0.95;
+}
+section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+section h2 {
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 3px solid var(--accent);
+  color: var(--accent-dark);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+section h3 {
+  margin: 18px 0 8px;
+  font-size: 17px;
+  color: var(--text);
+}
+ol, ul {
+  margin: 8px 0 12px;
+  padding-left: 26px;
+}
+li { margin: 4px 0; }
+p { margin: 10px 0; }
+strong { color: var(--accent-dark); }
+code {
+  background: var(--code-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: #d6336c;
+}
+.tool-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+.tool-list li {
+  background: var(--code-bg);
+  border-left: 4px solid var(--accent);
+  padding: 10px 16px;
+  margin: 6px 0;
+  border-radius: 6px;
+}
+.tool-list .tool-name {
+  display: inline-block;
+  min-width: 110px;
+  font-weight: 700;
+  color: var(--accent-dark);
+}
+.note {
+  background: var(--warm);
+  border-left: 4px solid var(--warm-border);
+  padding: 12px 18px;
+  border-radius: 6px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.note::before {
+  content: "💡 ";
+}
+.qa {
+  background: var(--code-bg);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin: 10px 0;
+}
+.qa .q {
+  font-weight: 700;
+  color: var(--accent-dark);
+  margin: 0 0 4px;
+}
+.qa .q::before {
+  content: "Q. ";
+}
+.qa .a {
+  margin: 0;
+  padding-left: 24px;
+  position: relative;
+}
+.qa .a::before {
+  content: "A.";
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+  color: var(--muted);
+}
+.file-list {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  background: #1e2128;
+  color: #e6e8ec;
+  padding: 16px 20px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.file-list .star { color: #ffd166; }
+.file-list .cmt { color: #9097a3; }
+.steps {
+  counter-reset: step;
+  list-style: none;
+  padding: 0;
+}
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 38px;
+  margin: 12px 0;
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+.toc {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 24px;
+  margin-bottom: 24px;
+}
+.toc h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: var(--muted);
+  border: none;
+}
+.toc ol { margin: 0; padding-left: 22px; }
+.toc a {
+  color: var(--accent-dark);
+  text-decoration: none;
+}
+.toc a:hover { text-decoration: underline; }
+footer {
+  text-align: center;
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.big-emoji {
+  font-size: 22px;
+  margin-right: 6px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>PDF ツール 使い方ガイド</h1>
+    <p>お使いのパソコンの中だけで PDF を編集できる、安全なツールです</p>
+  </header>
+
+  <div class="toc">
+    <h2>目次</h2>
+    <ol>
+      <li><a href="#start">はじめに — 起動のしかた</a></li>
+      <li><a href="#open">PDF を開く</a></li>
+      <li><a href="#tools">ツールの選び方</a></li>
+      <li><a href="#text">テキスト（文字）を書きこむ</a></li>
+      <li><a href="#shape">ハイライト・枠線・取り消し線</a></li>
+      <li><a href="#pen">ペンで手書きする</a></li>
+      <li><a href="#comment">コメント（ページ外の吹き出し）</a></li>
+      <li><a href="#edit">注釈を編集する・削除する</a></li>
+      <li><a href="#pages">ページの並べ替え・複数選択・削除</a></li>
+      <li><a href="#save">編集した PDF を保存する</a></li>
+      <li><a href="#more">その他の便利機能</a></li>
+      <li><a href="#trouble">困ったときは</a></li>
+      <li><a href="#about">このアプリについて</a></li>
+    </ol>
+  </div>
+
+  <section id="start">
+    <h2><span class="num">1</span> はじめに — 起動のしかた</h2>
+    <p>ダウンロードした ZIP ファイルを解凍し、中にある本体ファイルを
+    ダブルクリックしてください。お使いの OS によってファイル名が異なります。</p>
+
+    <p style="text-align:center;font-size:15px;font-weight:700;margin-top:14px;">
+      ■ <span style="color:var(--accent-dark)">Mac</span> をお使いの場合:<br>
+      <code>本体：ダブルクリックで作動.html</code>
+    </p>
+
+    <p style="text-align:center;font-size:15px;font-weight:700;margin-top:10px;">
+      ■ <span style="color:var(--accent-dark)">Windows</span> をお使いの場合:<br>
+      <code>pdf_tool_bundled.html</code>
+    </p>
+
+    <p style="margin-top:14px;">ダブルクリックすると、いつも使っているブラウザ
+    （Chrome、Edge、Safari、Firefox など）が開いて、すぐに使える状態になります。
+    インターネット接続は必要ありません。</p>
+
+    <div class="note">
+      <strong>Mac 版と Windows 版は中身が同じ</strong>です。このガイドで説明する
+      すべての機能（テキスト・ハイライト・枠線・コメント・ページの並べ替え・
+      ズーム・フォント切り替えなど）は、どちらの OS でも同じように動作します。
+      違いはダブルクリックで開くファイルの名前だけです。
+    </div>
+
+    <div class="note">
+      もし「どのアプリで開きますか？」と聞かれたら、
+      <strong>Chrome</strong>・<strong>Edge</strong>・<strong>Safari</strong>
+      のいずれかを選んでください。ほかのファイル（<code>lib</code> フォルダの中身など）
+      には触る必要はありません。本体ファイル 1 つだけで動作します。
+    </div>
+
+    <div class="note">
+      <strong>Windows で開けないとき:</strong> 解凍したフォルダーを外付けドライブ
+      ではなく、デスクトップや「ドキュメント」フォルダーなどパソコン本体の中に
+      コピーしてから、もう一度 <code>pdf_tool_bundled.html</code> をダブルクリック
+      してみてください。それでも開かない場合は、先に Edge か Chrome を起動しておき、
+      <code>pdf_tool_bundled.html</code> のアイコンをブラウザの画面に
+      ドラッグ＆ドロップする方法も有効です。
+    </div>
+  </section>
+
+  <section id="open">
+    <h2><span class="num">2</span> PDF を開く</h2>
+    <p>画面左上の <strong>「PDF を開く」</strong> ボタンをクリックし、編集したい
+    PDF ファイルを選びます。</p>
+    <p>または、PDF ファイルを画面の中へ直接 <strong>ドラッグ＆ドロップ</strong>
+    しても開けます。</p>
+    <p>PDF が表示されれば準備完了です。</p>
+  </section>
+
+  <section id="tools">
+    <h2><span class="num">3</span> ツールの選び方</h2>
+    <p>画面の上にあるボタンが各種「ツール」です。クリックすると、そのツールが
+    有効になります。</p>
+    <ul class="tool-list">
+      <li><span class="tool-name">選択</span> 注釈を選んで移動・サイズ変更・編集</li>
+      <li><span class="tool-name">テキスト</span> 文字を書き込む</li>
+      <li><span class="tool-name">ハイライト</span> マーカーペンのように色を塗る</li>
+      <li><span class="tool-name">枠線</span> 四角い枠で囲む</li>
+      <li><span class="tool-name">取り消し線</span> 二重線で見え消しにする</li>
+      <li><span class="tool-name">ペン</span> マウスで自由に線を描く</li>
+      <li><span class="tool-name">コメント</span> ページの外に吹き出しを付ける（詳しくは後述の章で）</li>
+      <li><span class="tool-name">消しゴム</span> クリックした注釈を 1 つだけ削除</li>
+    </ul>
+    <div class="note">
+      ツールの右にある <strong>カラーピッカー</strong>（色ボタン）と
+      <strong>サイズ入力欄</strong> で、描画する色と線の太さ・フォントサイズを
+      変更できます。
+    </div>
+    <div class="note">
+      <strong>フォントの選択:</strong> ツールバー右側の
+      <strong>フォント用プルダウンメニュー</strong> で、書き込む文字
+      （テキスト注釈・コメント・ページ番号）に使うフォントを選べます。
+      初期状態では「ゴシック体（Sawarabi Gothic）」が選ばれています。
+      お好みのフォントを使いたい場合は、プルダウンの一番下にある
+      <code>カスタムフォントを読み込む…</code> を選び、<code>.ttf</code>
+      または <code>.otf</code> のフォントファイルを指定してください。
+      一度読み込んだフォントはメニューに残り、いつでも切り替えられます。
+    </div>
+    <div class="note">
+      <strong>画面の拡大・縮小:</strong> ツールバー右端の
+      <code>−</code> / <code>100%</code> / <code>＋</code> ボタンで表示倍率を
+      変更できます。<code>100%</code> をクリックすると既定の大きさに戻ります。
+    </div>
+  </section>
+
+  <section id="text">
+    <h2><span class="num">4</span> テキスト（文字）を書き込む</h2>
+    <ol class="steps">
+      <li>「テキスト」ツールをクリックして選びます。</li>
+      <li>PDF 上の、文字を書きたい場所をクリックします。</li>
+      <li>入力ボックスが表示されるので、文字を入力します。</li>
+      <li><strong>Enter</strong> キーを押すと入力が確定します。</li>
+      <li>もう一度 Enter を押すと、テキスト注釈として完成します。</li>
+    </ol>
+    <div class="note">
+      日本語を変換している途中の Enter は変換確定のためのキーなので、
+      文字が消えてしまうことはありません。変換が完了してからもう一度
+      Enter を押すことで注釈が確定します。<br>
+      長い文章を入力すると、幅に合わせて自動的に 2 行・3 行と改行されます。<br>
+      後から文字を書き直したい場合は、その注釈を <strong>ダブルクリック</strong>
+      すると再編集モードになります。
+    </div>
+  </section>
+
+  <section id="shape">
+    <h2><span class="num">5</span> ハイライト・枠線・取り消し線</h2>
+    <ol class="steps">
+      <li>「ハイライト」「枠線」「取り消し線」のいずれかを選びます。</li>
+      <li>PDF 上で、注釈を付けたい範囲を
+      <strong>ドラッグ</strong>（左クリックを押したまま動かす）します。</li>
+      <li>マウスのボタンを離すと注釈が作成され、すぐに選択状態になります
+      （四隅にハンドルが表示されます）。</li>
+    </ol>
+    <p>色を変えたい場合は、先にツールバーの色ボタンで色を選んでから描画してください。</p>
+    <p>後から色や大きさを変更したいときは、<strong>「選択」ツールに切り替えて、
+    注釈の上をクリック</strong> します。<strong>枠線やハイライトは、その内側の
+    どこをクリックしても選択できます</strong>（線の上だけでなく枠内の空白部分でも
+    反応します）。</p>
+    <p>編集が終わったら、<strong>ページの空白部分をクリック</strong> するか
+    <strong>Enter キー</strong> を押すと、選択が解除されて確定状態になります。</p>
+  </section>
+
+  <section id="pen">
+    <h2><span class="num">6</span> ペンで手書きする</h2>
+    <ol class="steps">
+      <li>「ペン」ツールを選びます。</li>
+      <li>PDF 上でマウスをドラッグして、自由に線を描きます。</li>
+    </ol>
+    <p>線の太さはツールバーの「サイズ」欄の数値で調整できます。色も
+    色ボタンで変更可能です。</p>
+  </section>
+
+  <section id="comment">
+    <h2><span class="num">7</span> コメント（ページ外の吹き出し）</h2>
+    <p>Word のコメント機能のように、<strong>ページの枠外</strong> にメモを
+    貼り付けて、本文中の該当箇所と引き出し線でつなぐことができます。</p>
+
+    <ol class="steps">
+      <li>ツールバーから <strong>「コメント」</strong> を選びます。</li>
+      <li>コメントを付けたいページ上で、注釈する範囲を
+      <strong>ドラッグ</strong> して選択します（文章の一部を囲むようにマウスを
+      ドラッグしてください）。単にクリックしただけの場合は、点アンカーとして
+      使えます。</li>
+      <li>マウスボタンを離すと、選択した範囲に点線の枠が表示され、
+      <strong>ページの右外</strong> に黄色い吹き出しが現れます。</li>
+      <li>吹き出しの本文欄をクリックし、コメント内容を入力します。</li>
+      <li>タイトルバー部分を <strong>ドラッグ</strong> すると、吹き出しの位置を
+      変更できます。</li>
+      <li>吹き出しの <strong>右下の小さな四角（フィルハンドル）</strong>
+      をドラッグすると、吹き出しのサイズを変更できます。</li>
+    </ol>
+
+    <h3>返信を追加する</h3>
+    <p>吹き出しのタイトルバーにある <strong>「返信」</strong> ボタンを押すと、
+    親コメントの下に <strong>独立した小さなカード（サブウィンドウ）</strong>
+    が追加されます。「↳ 返信 1」「↳ 返信 2」のようにラベルが付き、
+    親コメントとは視覚的に区別されます。</p>
+    <ul>
+      <li>カードの本文欄をクリックして返信内容を入力します</li>
+      <li>「返信」ボタンを繰り返し押せば、いくつでも返信を追加できます</li>
+      <li>不要な返信は、その返信カード右上の <strong>×</strong>
+      ボタンで個別に削除できます</li>
+      <li>親コメントの左側から縦線、各返信カードには横方向の分岐線が表示され、
+      親子関係が一目で分かるようになっています</li>
+    </ul>
+
+    <h3>文字サイズを変更する</h3>
+    <p>吹き出しのタイトルバーにある <strong>A−</strong> / <strong>A+</strong>
+    ボタンで、その吹き出し内の文字サイズを変更できます
+    （吹き出しごとに個別に調整できます）。返信カードの文字も親コメントと
+    同じサイズで連動して変わります。</p>
+
+    <h3>コメント全体を削除する</h3>
+    <p>親コメントのタイトルバー右端の <strong>×</strong> をクリックすると、
+    そのコメント本体と、ぶら下がっている返信カードがすべてまとめて削除されます。</p>
+
+    <div class="note">
+      <strong>保存時の動作について:</strong> 「ダウンロード」ボタンで PDF を
+      エクスポートすると、コメントのあるページは
+      <strong>右側に余白領域が自動的に追加</strong> され、
+      コメントと返信が編集画面と同じ位置に焼き込まれます。
+      元のページ内容が隠れたり重なったりすることはありません。
+    </div>
+    <div class="note">
+      副作用として、コメントがあるページは <strong>元の PDF より横幅が
+      広くなります</strong>。印刷する場合は用紙設定にご注意ください
+      （例: A4 の PDF にコメントを付けると、A4 より右側に余白分だけ広い PDF に
+      なります）。コメントを付けていないページは元の幅のままです。
+    </div>
+  </section>
+
+  <section id="edit">
+    <h2><span class="num">8</span> 注釈を編集する・削除する</h2>
+
+    <h3>選択する</h3>
+    <p>「選択」ツールに切り替えて、注釈の上を <strong>クリック</strong>
+    すると選択できます。枠線やハイライトについては、
+    <strong>枠の内側のどこをクリックしても反応します</strong>
+    （枠線そのものの上だけでなく、内側の空白部分でも大丈夫です）。
+    選択すると、まわりに青い点線の枠と、四隅・辺に
+    <strong>青い四角（フィルハンドル）</strong> が表示されます。</p>
+
+    <h3>移動する</h3>
+    <p>選択枠の内側をつかんで <strong>ドラッグ</strong>
+    すると、注釈の位置を移動できます。</p>
+
+    <h3>サイズを変更する</h3>
+    <p>四隅や辺のフィルハンドルをドラッグすると、注釈の幅や高さを変えられます。</p>
+    <ul>
+      <li><strong>枠線・ハイライト</strong>: 8 個のハンドル（四隅 4 つ + 辺 4 つ）
+      で縦横とも自由にリサイズできます</li>
+      <li><strong>テキスト</strong>: 6 個のハンドル（四隅 4 つ + 左右 2 つ）で
+      幅を変えられます。高さは文字量に合わせて自動的に調整されます</li>
+    </ul>
+
+    <h3>色・太さ・サイズを変更する</h3>
+    <p>注釈を選択すると、画面の右上に
+    <strong>プロパティパネル</strong> が表示されます。ここで色・線の太さ・
+    フォントサイズ・透明度・幅・高さなどを調整できます。</p>
+
+    <div class="note">
+      <strong>選択の解除方法:</strong><br>
+      編集が終わって選択枠とハンドルを消したい場合は、以下のいずれかの方法で
+      解除できます。
+      <ul style="margin-top:4px;margin-bottom:2px;">
+        <li>ページの空白部分をクリック</li>
+        <li><strong>Enter</strong> キーを押す</li>
+        <li><strong>Escape</strong> キーを押す</li>
+        <li>別のツールに切り替える</li>
+      </ul>
+    </div>
+
+    <h3>削除する</h3>
+    <ul>
+      <li>プロパティパネルの赤い
+      <strong>「削除」</strong> ボタンを押す（おすすめ）</li>
+      <li>「消しゴム」ツールに切り替えて、削除したい注釈をクリックする</li>
+      <li>コメントの場合は、その吹き出し右上の
+      <strong>×</strong> ボタンで削除します</li>
+    </ul>
+  </section>
+
+  <section id="pages">
+    <h2><span class="num">9</span> ページの並べ替え・複数選択・削除</h2>
+    <p>画面下部の <strong>サムネイル帯</strong>（ページの縮小画像）を
+    ドラッグして左右に動かすと、ページの順番を入れ替えられます。</p>
+    <p>各サムネイルの右上にある <strong>×</strong>
+    ボタンで、そのページを削除できます。</p>
+
+    <h3>複数のページをまとめて操作する</h3>
+    <p>1 枚ずつ動かすだけでなく、<strong>複数のページを選択してまとめて
+    並べ替え・削除</strong> することができます。</p>
+    <ul>
+      <li><strong>通常クリック</strong>: クリックしたページだけを選択します
+      （以前の選択は解除されます）</li>
+      <li><strong>Shift + クリック</strong>: 直前に選んだページから今クリック
+      したページまでの範囲をまとめて選択します</li>
+      <li><strong>Ctrl + クリック</strong>（Mac では
+      <strong>Command + クリック</strong>）: クリックしたページを 1 枚ずつ
+      選択に追加・解除できます（離れたページを個別に選べます）</li>
+      <li><strong>Shift + ← / → キー</strong>: 現在の選択範囲を矢印の方向に
+      1 枚ずつ広げます（ページの並び順は変わりません）</li>
+      <li><strong>← / → キー（Shift なし）</strong>: 選択中のページをまとめて
+      1 ステップだけ左右に移動します</li>
+      <li><strong>ドラッグ</strong>: 選択中のサムネイルをつかんでドラッグすると、
+      選んだページをまとめて指定の位置に移動できます（上部に「N」のバッジが
+      表示されます）</li>
+      <li><strong>Delete / Backspace キー</strong>: 選択中のページを
+      <strong>まとめて削除</strong> します（確認ダイアログが表示されます）</li>
+    </ul>
+    <div class="note">
+      <strong>Shift キーを押している間は並び順は変わりません</strong>
+      （選択範囲を広げるだけです）。順番を変更したいときは Shift を押さずに
+      矢印キーかドラッグを使ってください。
+    </div>
+    <div class="note">
+      <strong>複数ページのまとめて削除:</strong> Ctrl / Shift クリックで
+      削除したいページを複数選択してから、Delete キー（Mac では delete / fn+delete）
+      または Backspace キーを押してください。選択した全ページが一度に削除されます。
+      誤って押してしまわないよう、実行前に確認ダイアログが表示されます。
+    </div>
+  </section>
+
+  <section id="save">
+    <h2><span class="num">10</span> 編集した PDF を保存する</h2>
+    <p>画面右上の青い <strong>「ダウンロード」</strong> ボタンをクリックすると、
+    編集済みの PDF がお使いのパソコンに保存されます。</p>
+    <p>保存されるファイル名は、元の PDF に <code>_edited</code>
+    を付けたものになります。</p>
+    <p style="text-align:center;font-size:15px;">
+      例: <code>report.pdf</code> → <code>report_edited.pdf</code>
+    </p>
+  </section>
+
+  <section id="more">
+    <h2><span class="num">11</span> その他の便利機能</h2>
+
+    <h3>画像から PDF を作る</h3>
+    <p><strong>「画像→PDF」</strong> ボタンで PNG や JPEG の画像ファイルを
+    選ぶと、それらを 1 つの PDF にまとめることができます。</p>
+
+    <h3>複数の PDF を結合する</h3>
+    <p><strong>「PDF を追加」</strong> ボタンで別の PDF ファイルを選ぶと、
+    現在開いている PDF の後ろにそのファイルが追加されます。</p>
+
+    <h3>ページ番号を挿入する</h3>
+    <p><strong>「ページ番号」</strong> ボタンをクリックすると、ダイアログが
+    表示されます。位置（下中央など）と書式（<code>1/10</code> など）を選び、
+    「追加」ボタンを押すと、各ページに自動でページ番号が挿入されます。</p>
+
+    <h3>最初からやり直す</h3>
+    <p><strong>「クリア」</strong> ボタンで、現在の PDF をすべて破棄し、
+    最初からやり直すことができます。</p>
+  </section>
+
+  <section id="trouble">
+    <h2><span class="num">12</span> 困ったときは</h2>
+
+    <div class="qa">
+      <p class="q">テキストを入力したのに、消えてしまった</p>
+      <p class="a">日本語の変換中に Enter を 2 回連続で押してしまった可能性があります。
+      変換確定のための Enter と、テキスト注釈を確定するための Enter は別の操作なので、
+      一度変換を確定してから、改めて Enter を押してください。</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">ボタンを押しても反応がない</p>
+      <p class="a">ブラウザを最新版に更新してみてください。推奨ブラウザは
+      Chrome・Edge・Safari・Firefox の最新版です。</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">日本語のフォントがうまく表示されない</p>
+      <p class="a">このアプリには日本語フォント（Sawarabi Gothic）が最初から
+      組み込まれており、ツールバーの <strong>フォントプルダウン</strong>
+      で初期選択されています。別のフォントを使いたい場合は、プルダウン最下段の
+      <code>カスタムフォントを読み込む…</code> を選び、
+      <code>.ttf</code> または <code>.otf</code> 形式のフォントファイルを
+      読み込ませてください。一度読み込んだフォントは以降もプルダウンに残り、
+      いつでも切り替えられます。</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">枠線をクリックしても選択できない</p>
+      <p class="a">枠線は <strong>枠の内側のどこをクリックしても</strong>
+      選択できます。まずツールが「選択」になっているか確認し、枠の中央付近を
+      クリックしてみてください。</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">注釈を選んだ後、選択を解除したい</p>
+      <p class="a">ページの空白部分をクリックするか、<strong>Enter</strong>
+      キーまたは <strong>Escape</strong> キーを押してください。
+      選択枠とフィルハンドルが消え、確定状態になります。</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Windows と Mac で動作に違いはありますか</p>
+      <p class="a">いいえ、両方とも中身は同一で、機能・操作方法とも完全に同じです。
+      このガイドはどちらの OS でも共通して使えます。違いは
+      <strong>ダブルクリックで開くファイル名だけ</strong> です
+      （Mac: <code>本体：ダブルクリックで作動.html</code>、
+      Windows: <code>pdf_tool_bundled.html</code>）。</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">大きな PDF を開くと動作が重い</p>
+      <p class="a">100 ページを超えるような大容量の PDF は、読み込みに時間が
+      かかることがあります。読み込み中はしばらくそのままお待ちください。</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">編集内容がインターネット経由で外部に送信されないか心配です</p>
+      <p class="a">このアプリは一切の外部送信を行いません。ソースコードを
+      確認しても、画像・PDF・入力した文字をどこかへ送信する処理は含まれていません。
+      作業中に Wi-Fi をオフにしても問題なく動作します。安心してお使いください。</p>
+    </div>
+  </section>
+
+  <section id="about">
+    <h2><span class="num">13</span> このアプリについて</h2>
+    <p>このアプリは <strong>「クライアントサイド」</strong>
+    という方式で作られています。少し技術的な用語ですが、
+    かみくだいて説明すると:</p>
+    <p style="text-align:center;font-size:18px;font-weight:700;color:var(--accent-dark);">
+      「お使いのブラウザの中だけで、PDF の編集が完結している」
+    </p>
+    <p>という意味です。インターネット接続がなくても動作し、
+    お使いのパソコンの外にファイルや入力内容が送信されることはありません。</p>
+    <p>業務上の機密文書、個人情報が含まれる書類、医療関係の書類など、
+    外部に出せないファイルでも安心してお使いいただけます。</p>
+
+    <h3>同梱ファイルの内訳</h3>
+    <p><strong>Mac 版 (PDF_Tool_Mac.zip)</strong>:</p>
+    <pre class="file-list">
+<span class="star">★</span> 本体：ダブルクリックで作動.html  <span class="cmt">← ★Mac ではこちらをダブルクリック</span>
+  pdf_tool_bundled.html      <span class="cmt">← 上と同じ内容（ASCII 名のコピー）</span>
+  pdf_tool.html              <span class="cmt">← ライブラリ分離型（中・上級者向け）</span>
+  lib/                       <span class="cmt">← ライブラリ分離型で使用する部品</span>
+  使い方ガイド.html          <span class="cmt">← 本ガイド（ブラウザで開けます）</span>
+  LICENSE.txt                <span class="cmt">← 同梱ライブラリのライセンス</span>
+  SHA256SUMS.txt             <span class="cmt">← ファイル改ざん検出用のハッシュ値</span>
+    </pre>
+
+    <p style="margin-top:14px;"><strong>Windows 版 (PDF_Tool_Windows.zip)</strong>:</p>
+    <pre class="file-list">
+<span class="star">★</span> pdf_tool_bundled.html      <span class="cmt">← ★Windows ではこちらをダブルクリック</span>
+  pdf_tool.html              <span class="cmt">← ライブラリ分離型（中・上級者向け）</span>
+  lib/                       <span class="cmt">← ライブラリ分離型で使用する部品</span>
+  使い方ガイド.html          <span class="cmt">← 本ガイド（ブラウザで開けます）</span>
+  README_Windows.txt         <span class="cmt">← 起動できないときのトラブルシュート</span>
+  LICENSE.txt                <span class="cmt">← 同梱ライブラリのライセンス</span>
+  SHA256SUMS.txt             <span class="cmt">← ファイル改ざん検出用のハッシュ値</span>
+    </pre>
+    <div class="note">
+      Windows 版には <code>本体：ダブルクリックで作動.html</code> は同梱していません。
+      ファイル名に含まれる全角コロン「：」が原因で Windows 上で開けなくなる
+      既知の問題を回避するためです。
+    </div>
+
+    <h3>動作環境</h3>
+    <ul>
+      <li>OS: Windows / Mac / Linux のいずれでも動作します</li>
+      <li>ブラウザ: Chrome / Edge / Safari / Firefox の最新版を推奨します</li>
+      <li>インターネット接続: 不要です</li>
+    </ul>
+  </section>
+
+  <footer>
+    どうぞご活用ください。
+  </footer>
+
+</div>
+</body>
+</html>

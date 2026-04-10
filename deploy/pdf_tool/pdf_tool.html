@@ -1,0 +1,4001 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Defense-in-depth CSP: deny external network egress so an injected XSS
+     cannot exfiltrate data via fetch/XHR/WebSocket.
+     - 'unsafe-inline' / 'unsafe-eval' are required because pdf.js and pdf-lib
+       use inline scripts and dynamic Function() at runtime.
+     - blob: is required so the bundled PDF.js worker can be loaded from a
+       Blob URL (worker-src) and as a script (script-src).
+     - connect-src is restricted to local schemes only — no http(s) egress. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' blob: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
+<title>PDF Tool — クライアントサイド版 (オフライン)</title>
+<!-- All processing happens in the browser. No external CDN — every dependency
+     is bundled in ./lib/ for full offline operation and tamper resistance. -->
+<script src="lib/pdf.min.js"></script>
+<script src="lib/pdf-lib.min.js"></script>
+<!-- fontkit is required by pdf-lib to embed custom (non-standard) fonts. -->
+<script src="lib/fontkit.umd.min.js"></script>
+<style>
+:root {
+  --bg: #1e1f23;
+  --bg-elev: #2a2c33;
+  --bg-strip: #15161a;
+  --border: #3a3d46;
+  --text: #e6e8ec;
+  --muted: #9097a3;
+  --accent: #4a9eff;
+  --accent-soft: rgba(74,158,255,0.15);
+  --danger: #ff5a5a;
+  --thumb-w: 84px;
+  --thumb-h: 110px;
+  --view-scale: 1.4;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Hiragino Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  overflow: hidden;
+}
+#app { display: flex; flex-direction: column; height: 100%; }
+
+/* --- Toolbar --- */
+#toolbar {
+  flex-shrink: 0;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+#toolbar h1 {
+  margin: 0 12px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.tb-btn {
+  background: #3a3d46;
+  color: var(--text);
+  border: 1px solid #4a4d56;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tb-btn:hover { background: #4a4d56; border-color: var(--accent); }
+.tb-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tb-btn.primary:hover { background: #2d8aef; }
+.tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tb-btn.tool { min-width: 56px; }
+.tb-btn.tool.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.tb-sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+.tb-info { color: var(--muted); font-size: 12px; margin-left: auto; }
+.tb-color {
+  width: 28px; height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.tb-num {
+  width: 56px;
+  background: #1a1c20;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.tb-select {
+  background: #1a1c20;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  max-width: 200px;
+  cursor: pointer;
+}
+.tb-select:hover { border-color: var(--accent); }
+.tb-select option { background: #1a1c20; color: var(--text); }
+
+/* --- Viewer --- */
+#viewer {
+  flex: 1;
+  overflow: auto;          /* horizontal scroll too, so the gutter is always
+                              reachable even if the window is narrower than
+                              page + gutter */
+  background: #0f1014;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+/* page-frame reserves (page width + gutter width) in its box model so
+   align-items:center in #viewer centers "page + gutter" as a unit. The
+   comment-gutter and leader-svg are ABSOLUTELY positioned inside the frame
+   (not flex children) so flex sizing cannot squish them onto the page. */
+.page-frame {
+  position: relative;
+  /* width/height are set inline; no flex container. */
+}
+.page-wrap {
+  position: relative;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.comment-gutter {
+  position: absolute;
+  top: 0;
+  /* `left` is set inline to match the page-wrap's right edge. */
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 1px dashed rgba(255, 170, 0, 0.25);
+  pointer-events: auto;
+  /* Allow comment boxes to be visually distinct from page background. */
+  z-index: 8;
+}
+.leader-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;            /* leader lines themselves are inert */
+  z-index: 6;
+  overflow: visible;
+}
+.leader-svg line { stroke-linecap: round; }
+/* Anchor rect / dot on the PDF body side are the ACTIVATION trigger for
+   their comment. Override leader-svg's pointer-events: none so clicks land. */
+.leader-svg .comment-anchor-rect,
+.leader-svg .comment-anchor-dot {
+  pointer-events: all;
+  cursor: pointer;
+}
+.leader-svg .comment-anchor-rect:hover {
+  fill-opacity: 0.3;
+}
+/* Active anchor rect: shown as draggable. Solid, bold, visible outline. */
+.leader-svg .comment-anchor-rect.active {
+  cursor: move;
+  stroke-width: 2;
+  stroke-dasharray: none;
+  fill-opacity: 0.25;
+}
+.leader-svg .comment-anchor-dot.active {
+  cursor: move;
+}
+/* Resize handles drawn around the active anchor rect (8 corners/edges). */
+.leader-svg .anchor-handle {
+  fill: #ff8800;
+  stroke: #fff;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: all;
+}
+.leader-svg .anchor-handle:hover { fill: #ffaa00; }
+.leader-svg .anchor-handle.nw,
+.leader-svg .anchor-handle.se { cursor: nwse-resize; }
+.leader-svg .anchor-handle.ne,
+.leader-svg .anchor-handle.sw { cursor: nesw-resize; }
+.leader-svg .anchor-handle.n,
+.leader-svg .anchor-handle.s  { cursor: ns-resize; }
+.leader-svg .anchor-handle.e,
+.leader-svg .anchor-handle.w  { cursor: ew-resize; }
+.comment-box {
+  position: absolute;
+  background: #fff6dd;
+  border: 1px solid #d89000;      /* thinner, muted when INACTIVE */
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  font-family: "Hiragino Sans", "Noto Sans JP", Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  z-index: 10;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+/* ACTIVE state: thicker border + prominent shadow + header draggable +
+   fill handle visible. Entered by clicking the anchor rect / dot on the
+   PDF body side; exited by clicking outside any comment. */
+.comment-box.active {
+  border: 2px solid #ff8800;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+}
+.comment-box:not(.active) .cb-fill-handle {
+  display: none;                   /* resize handle only visible when active */
+}
+.comment-box:not(.active) .cb-header {
+  cursor: default;                 /* not draggable when inactive */
+}
+.comment-box .cb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffe29a;
+  color: #553300;
+  padding: 2px 4px;
+  font-size: 10px;
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+  gap: 4px;
+}
+.comment-box .cb-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.comment-box .cb-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.comment-box .cb-tools button {
+  background: rgba(255,255,255,0.4);
+  border: 1px solid rgba(120,80,0,0.35);
+  color: #553300;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 5px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.comment-box .cb-tools button:hover {
+  background: #fff;
+  border-color: #884400;
+}
+.comment-box .cb-del {
+  background: transparent !important;
+  border: none !important;
+  color: #884400;
+  font-size: 14px !important;
+  padding: 0 3px !important;
+  cursor: pointer;
+}
+.comment-box .cb-del:hover { color: var(--danger) !important; }
+.comment-box .cb-body {
+  flex: 1;
+  padding: 3px 5px;
+  line-height: 1.3;
+  color: #222;
+  outline: none;
+  overflow: auto;
+  word-break: break-word;
+  white-space: pre-wrap;
+  min-height: 0;
+}
+.comment-box .cb-replies {
+  /* Container for reply "sub-windows" stacked below the main comment body. */
+  margin: 4px 4px 4px 12px;   /* left indent to suggest nesting */
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+}
+/* Vertical connector line from parent body down the left edge of the replies. */
+.comment-box .cb-replies::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 0;
+  bottom: 4px;
+  width: 2px;
+  background: #d0a060;
+  border-radius: 1px;
+}
+.comment-box .cb-reply-item {
+  /* Each reply is a distinct bordered card — a mini window below the parent. */
+  display: flex;
+  flex-direction: column;
+  background: #fffcf1;
+  border: 1px solid #e0b050;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(140,90,0,0.25);
+  overflow: hidden;
+  position: relative;
+}
+.comment-box .cb-reply-item::before {
+  /* Little "branch" connector from the vertical line to this card. */
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 11px;
+  width: 6px;
+  height: 2px;
+  background: #d0a060;
+}
+.comment-box .cb-reply-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffe8b0;
+  color: #663300;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  user-select: none;
+  flex-shrink: 0;
+}
+.comment-box .cb-reply-head .label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.comment-box .cb-reply-head .label::before {
+  content: "↳";
+  font-weight: 700;
+  color: #884400;
+}
+.comment-box .cb-reply-text {
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #333;
+  padding: 3px 6px;
+  line-height: 1.3;
+  min-height: 1.4em;
+}
+.comment-box .cb-reply-del {
+  background: transparent;
+  border: none;
+  color: #884400;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.comment-box .cb-reply-del:hover { color: var(--danger); }
+.comment-box .cb-fill-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  background: #ffaa00;
+  border: 1px solid #663300;
+  cursor: nwse-resize;
+  box-sizing: border-box;
+  z-index: 5;
+}
+.comment-box .cb-fill-handle:hover { background: #ff8800; }
+
+/* Reply boxes — separate floating windows in the gutter, NOT nested in the
+   parent comment. Each reply is an independent absolutely-positioned div. */
+.reply-box {
+  position: absolute;
+  background: #fffcf1;
+  border: 1.5px solid #e0b050;
+  border-radius: 5px;
+  box-shadow: 0 1px 4px rgba(140,90,0,0.3);
+  font-family: "Hiragino Sans", "Noto Sans JP", Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  z-index: 9;
+  pointer-events: auto;
+}
+.reply-box .rb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffe8b0;
+  color: #663300;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  user-select: none;
+  flex-shrink: 0;
+  cursor: move;
+}
+.reply-box .rb-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.reply-box .rb-label::before {
+  content: "↳";
+  font-weight: 700;
+  color: #884400;
+}
+.reply-box .rb-del {
+  background: transparent;
+  border: none;
+  color: #884400;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.reply-box .rb-del:hover { color: var(--danger); }
+.reply-box .rb-body {
+  flex: 1;
+  padding: 3px 5px;
+  line-height: 1.3;
+  color: #333;
+  outline: none;
+  overflow: auto;
+  word-break: break-word;
+  white-space: pre-wrap;
+  min-height: 1.4em;
+}
+.comment-anchor-dot {
+  fill: #ffaa00;
+  stroke: #663300;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.page-wrap canvas { display: block; }
+.page-wrap svg.overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Always interactive — annotations and selection chrome need clicks. */
+  pointer-events: auto;
+}
+.page-wrap.tool-active svg.overlay { cursor: crosshair; }
+.page-wrap.tool-text.tool-active svg.overlay { cursor: text; }
+.page-wrap.tool-eraser.tool-active svg.overlay { cursor: not-allowed; }
+
+.annot {
+  cursor: pointer;
+}
+.tool-eraser .annot:hover {
+  outline: 2px dashed var(--danger);
+  outline-offset: 2px;
+}
+
+/* Selection visuals (rendered inside the SVG overlay). */
+.sel-bg {
+  fill: rgba(74, 158, 255, 0.08);
+  stroke: var(--accent);
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.sel-move {
+  fill: rgba(255,255,255,0.001);  /* near-transparent but definitely "painted" */
+  cursor: move;
+  pointer-events: all;            /* make sure the whole bbox is draggable */
+}
+.sel-handle {
+  fill: var(--accent);
+  stroke: #fff;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: all;
+}
+.sel-handle:hover { fill: #2d8aef; }
+.sel-handle.nw, .sel-handle.se { cursor: nwse-resize; }
+.sel-handle.ne, .sel-handle.sw { cursor: nesw-resize; }
+.sel-handle.n,  .sel-handle.s  { cursor: ns-resize; }
+.sel-handle.e,  .sel-handle.w  { cursor: ew-resize; }
+
+/* Floating property panel for the selected annotation. */
+#prop-panel {
+  position: fixed;
+  top: 70px;
+  right: 18px;
+  width: 240px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+  z-index: 500;
+  display: none;
+}
+#prop-panel.show { display: block; }
+#prop-panel h4 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+#prop-panel .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+#prop-panel .row > label {
+  flex: 0 0 70px;
+  color: var(--muted);
+}
+#prop-panel input[type=number],
+#prop-panel input[type=range] {
+  flex: 1;
+  background: #1a1c20;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+#prop-panel input[type=color] {
+  width: 36px; height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+#prop-panel .opacity-val {
+  flex: 0 0 32px;
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+#prop-panel button.del {
+  width: 100%;
+  margin-top: 10px;
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  padding: 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+}
+#prop-panel button.del:hover { background: #ff3838; }
+
+/* Inline text-input overlay for new / edited text annotations (textarea) */
+.text-input-floating {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px dashed var(--accent);
+  padding: 2px 4px;
+  font-family: "Hiragino Sans", "Noto Sans JP", "Helvetica", Arial, sans-serif;
+  outline: none;
+  z-index: 50;
+  min-width: 30px;
+  box-sizing: content-box;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#welcome {
+  margin: auto;
+  text-align: center;
+  color: var(--muted);
+}
+#welcome h2 { color: var(--text); margin-bottom: 8px; }
+
+/* --- Thumbnail strip --- */
+#strip {
+  flex-shrink: 0;
+  height: calc(var(--thumb-h) + 32px);
+  background: var(--bg-strip);
+  border-top: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+}
+.thumb {
+  flex-shrink: 0;
+  width: var(--thumb-w);
+  height: var(--thumb-h);
+  background: #fff;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  position: relative;
+  cursor: grab;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.thumb:hover { border-color: var(--muted); }
+.thumb canvas {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.thumb-label {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  text-align: center;
+  font-size: 10px;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  padding: 2px 0;
+  pointer-events: none;
+}
+.thumb-del {
+  position: absolute;
+  top: 3px; right: 3px;
+  width: 18px; height: 18px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+  z-index: 5;
+}
+.thumb:hover .thumb-del { display: block; }
+.thumb-del:hover { background: var(--danger); }
+.thumb.dragging { opacity: 0.35; border-color: var(--accent); cursor: grabbing; }
+.thumb.multi-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent), 0 2px 8px rgba(74,158,255,0.5);
+  background: var(--accent-soft);
+}
+.thumb-ghost-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 10px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+
+.thumb-ghost {
+  position: fixed;
+  width: var(--thumb-w);
+  height: var(--thumb-h);
+  background: #fff;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.65);
+  transform: rotate(2deg);
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+.thumb-ghost canvas { width: 100%; height: 100%; object-fit: contain; }
+
+.drop-indicator {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 2px;
+  box-shadow: 0 0 10px rgba(74,158,255,0.95);
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* --- Modal --- */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px 28px;
+  min-width: 360px;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+}
+.modal h3 { margin: 0 0 16px; font-size: 16px; }
+.modal label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.modal label > span { min-width: 110px; color: var(--muted); }
+.modal input[type=text],
+.modal input[type=number],
+.modal select {
+  flex: 1;
+  background: #1a1c20;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+#toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 2000;
+}
+#toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="toolbar">
+    <h1>PDF Tool</h1>
+    <button class="tb-btn primary" id="btn-open">PDFを開く</button>
+    <button class="tb-btn" id="btn-merge">PDFを追加</button>
+    <button class="tb-btn" id="btn-img2pdf">画像→PDF</button>
+    <span class="tb-sep"></span>
+
+    <!-- Annotation tools -->
+    <button class="tb-btn tool active" data-tool="select" title="選択 / 移動 / リサイズ">選択</button>
+    <button class="tb-btn tool" data-tool="text" title="テキスト注釈">テキスト</button>
+    <button class="tb-btn tool" data-tool="highlight" title="ハイライト (塗りつぶし矩形)">ハイライト</button>
+    <button class="tb-btn tool" data-tool="frame" title="枠線 (矩形のアウトライン)">枠線</button>
+    <button class="tb-btn tool" data-tool="strikethrough" title="取り消し線 (二重線で見え消し)">取り消し線</button>
+    <button class="tb-btn tool" data-tool="pen" title="ペン (フリーハンド)">ペン</button>
+    <button class="tb-btn tool" data-tool="comment" title="コメント (ページ外の吹き出し)">コメント</button>
+    <button class="tb-btn tool" data-tool="eraser" title="消しゴム (クリックで削除)">消しゴム</button>
+    <input type="color" class="tb-color" id="tool-color" value="#ff3030" title="色">
+    <input type="number" class="tb-num" id="tool-size" value="14" min="2" max="72" title="サイズ / 太さ / フォント">
+
+    <span class="tb-sep"></span>
+    <select class="tb-select" id="font-select" title="埋め込みフォントを選択">
+      <option value="0">ゴシック体 (Sawarabi Gothic)</option>
+      <option value="_load">カスタムフォントを読み込む…</option>
+    </select>
+    <button class="tb-btn" id="btn-pagenum" disabled>ページ番号</button>
+    <button class="tb-btn" id="btn-clear" disabled>クリア</button>
+    <span class="tb-sep"></span>
+    <button class="tb-btn" id="btn-zoom-out" title="ズームアウト">−</button>
+    <button class="tb-btn" id="btn-zoom-reset" title="100% に戻す">100%</button>
+    <button class="tb-btn" id="btn-zoom-in" title="ズームイン">＋</button>
+    <span class="tb-sep"></span>
+    <button class="tb-btn primary" id="btn-save" disabled>ダウンロード</button>
+    <span class="tb-info" id="info">PDFが読み込まれていません</span>
+  </div>
+
+  <div id="viewer">
+    <div id="welcome">
+      <h2>クライアントサイド PDF Tool</h2>
+      <p>「PDFを開く」または「画像→PDF」で開始してください。</p>
+      <p style="font-size:12px;margin-top:16px">
+        ・サムネイルをドラッグして並べ替え（複数選択: Shift クリック=範囲 / Ctrl・Cmd クリック=個別トグル / Shift+←→=範囲拡張 / ←→=まとめて移動）<br>
+        ・サムネ右上の × で 1 ページ削除 / 複数選択中に Delete・Backspace キーでまとめて削除<br>
+        ・ツールバー右のズーム（−／100%／＋）で拡大縮小、フォントはプルダウンで切替<br>
+        ・ツールバーで注釈ツールを選択 → ページ上で描画<br>
+        ・「コメント」ツール: ページ上をクリック → 右外のガターに吹き出し。A− / A+ でサイズ、「返信」で返信追加、右下ハンドルで枠拡大<br>
+        ・全処理はブラウザ内で完結（外部送信なし）
+      </p>
+    </div>
+  </div>
+
+  <div id="strip"></div>
+</div>
+
+<input type="file" id="file-pdf" accept="application/pdf" style="display:none">
+<input type="file" id="file-pdf-multi" accept="application/pdf" multiple style="display:none">
+<input type="file" id="file-img" accept="image/png,image/jpeg" multiple style="display:none">
+<input type="file" id="file-font" accept=".ttf,.otf,font/ttf,font/otf" style="display:none">
+
+<!-- Page number dialog -->
+<div class="modal-overlay" id="pn-modal">
+  <div class="modal">
+    <h3>ページ番号を追加</h3>
+    <label><span>位置</span>
+      <select id="pn-pos">
+        <option value="bottom-center" selected>下中央</option>
+        <option value="bottom-left">下左</option>
+        <option value="bottom-right">下右</option>
+        <option value="top-center">上中央</option>
+        <option value="top-left">上左</option>
+        <option value="top-right">上右</option>
+      </select>
+    </label>
+    <label><span>書式</span>
+      <input type="text" id="pn-format" value="{page}" placeholder="例: {page}/{total}">
+    </label>
+    <label><span>フォントサイズ</span>
+      <input type="number" id="pn-size" value="12" min="6" max="48">
+    </label>
+    <label><span>開始番号</span>
+      <input type="number" id="pn-start" value="1" min="0">
+    </label>
+    <label><span>スキップページ</span>
+      <input type="text" id="pn-skip" placeholder="例: 1,2 (空でなし)">
+    </label>
+    <div class="modal-buttons">
+      <button class="tb-btn" id="pn-cancel">キャンセル</button>
+      <button class="tb-btn primary" id="pn-ok">追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- Property panel for the currently selected annotation -->
+<div id="prop-panel">
+  <h4 id="prop-title">注釈</h4>
+  <div class="row" id="row-color">
+    <label>色</label>
+    <input type="color" id="prop-color">
+  </div>
+  <div class="row" id="row-fontsize" style="display:none">
+    <label>フォント</label>
+    <input type="number" id="prop-fontsize" min="4" max="200" step="1">
+    <span style="color:var(--muted);font-size:11px">pt</span>
+  </div>
+  <div class="row" id="row-stroke" style="display:none">
+    <label>線の太さ</label>
+    <input type="number" id="prop-stroke" min="0.5" max="40" step="0.5">
+    <span style="color:var(--muted);font-size:11px">pt</span>
+  </div>
+  <div class="row" id="row-w" style="display:none">
+    <label>幅</label>
+    <input type="number" id="prop-w" min="2" step="1">
+    <span style="color:var(--muted);font-size:11px">pt</span>
+  </div>
+  <div class="row" id="row-h" style="display:none">
+    <label>高さ</label>
+    <input type="number" id="prop-h" min="2" step="1">
+    <span style="color:var(--muted);font-size:11px">pt</span>
+  </div>
+  <div class="row">
+    <label>透明度</label>
+    <input type="range" id="prop-opacity" min="0" max="100" step="1">
+    <span class="opacity-val" id="prop-opacity-val">100</span>
+  </div>
+  <button class="del" id="prop-delete">削除</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// =============================================================================
+// PDF Tool — fully client-side editor with annotations and page reorder.
+// =============================================================================
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = "lib/pdf.worker.min.js";
+
+const { PDFDocument, StandardFonts, rgb } = PDFLib;
+
+// ----- Japanese font loaded on demand via fontkit ---------------------------
+// pdf-lib's StandardFonts only support Latin-1, so any Japanese content needs
+// a real TTF/OTF + fontkit. We try several CDNs in order; if all fail, the
+// user can also upload a font file manually via the toolbar button.
+//
+// Sawarabi Gothic is small (~2 MB) and lives in the official google/fonts
+// GitHub mirror, which jsdelivr serves with proper CORS headers.
+const JP_FONT_URLS = [
+  // Bundled locally — no network egress, no CDN trust required.
+  "lib/SawarabiGothic-Regular.ttf",
+];
+
+// Font registry: list of selectable fonts. The first entry (bundled gothic)
+// is always present; users can upload more via the toolbar pulldown.
+// Each entry: { name, bytes: Uint8Array|null, source: "bundled"|"user" }
+const fontRegistry = [
+  { name: "ゴシック体 (Sawarabi Gothic)", bytes: null, source: "bundled" },
+];
+let currentFontIdx = 0;
+
+let jpFontBytesCache = null;       // cached Uint8Array of the *active* font file
+let jpFontFetchPromise = null;     // in-flight fetch (de-dupes parallel calls)
+let jpFontSourceLabel = null;      // for status reporting
+
+async function loadJpFontBytes() {
+  const entry = fontRegistry[currentFontIdx];
+  if (!entry) throw new Error("フォントが選択されていません");
+  if (entry.bytes) {
+    jpFontBytesCache = entry.bytes;
+    jpFontSourceLabel = entry.name;
+    return entry.bytes;
+  }
+  if (entry.source !== "bundled") {
+    throw new Error(`${entry.name} のデータが空です`);
+  }
+  // Bundled font: fetch from lib/ (or data URL in the bundled build).
+  if (jpFontFetchPromise) return jpFontFetchPromise;
+  toast("日本語フォントを読み込み中...", 6000);
+  jpFontFetchPromise = (async () => {
+    const errors = [];
+    for (const url of JP_FONT_URLS) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) { errors.push(`${url} → HTTP ${res.status}`); continue; }
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength < 1024) {
+          errors.push(`${url} → 不正なサイズ (${buf.byteLength}B)`);
+          continue;
+        }
+        const bytes = new Uint8Array(buf);
+        entry.bytes = bytes;
+        jpFontBytesCache = bytes;
+        jpFontSourceLabel = entry.name;
+        return bytes;
+      } catch (e) {
+        errors.push(`${url} → ${e.message}`);
+      }
+    }
+    jpFontFetchPromise = null;
+    throw new Error("すべてのフォントURL取得に失敗:\n" + errors.join("\n"));
+  })();
+  return jpFontFetchPromise;
+}
+
+/**
+ * Register a user-supplied font file in the registry and switch to it.
+ */
+async function setJpFontFromFile(file) {
+  const buf = await file.arrayBuffer();
+  if (buf.byteLength < 1024) throw new Error("ファイルが小さすぎます");
+  const bytes = new Uint8Array(buf);
+  // If a font with this name is already registered, overwrite it.
+  let idx = fontRegistry.findIndex(e => e.name === file.name);
+  if (idx < 0) {
+    fontRegistry.push({ name: file.name, bytes, source: "user" });
+    idx = fontRegistry.length - 1;
+  } else {
+    fontRegistry[idx].bytes = bytes;
+  }
+  currentFontIdx = idx;
+  jpFontBytesCache = bytes;
+  jpFontSourceLabel = file.name;
+  refreshFontSelect();
+  toast(`フォントを設定: ${file.name}`);
+}
+
+/** Re-render the font pulldown options to match fontRegistry. */
+function refreshFontSelect() {
+  const sel = document.getElementById("font-select");
+  if (!sel) return;
+  sel.innerHTML = "";
+  fontRegistry.forEach((entry, idx) => {
+    const opt = document.createElement("option");
+    opt.value = String(idx);
+    opt.textContent = entry.source === "user" ? `★ ${entry.name}` : entry.name;
+    if (idx === currentFontIdx) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  const loadOpt = document.createElement("option");
+  loadOpt.value = "_load";
+  loadOpt.textContent = "カスタムフォントを読み込む…";
+  sel.appendChild(loadOpt);
+}
+
+/**
+ * Embed the Japanese font into a pdf-lib PDFDocument and return the PDFFont.
+ * Registers fontkit on the doc (idempotent).
+ *
+ * NOTE on subsetting: pdf-lib's subsetter can produce PDFs that Acrobat flags
+ * with "埋め込みフォントを抽出できません" because the subset's ToUnicode CMap
+ * or font tables come out incomplete for certain CJK fonts. We therefore
+ * embed the FULL font (subset: false). The file grows by ~2 MB per export
+ * but the result is reliably viewable and printable in every PDF reader.
+ */
+async function embedJpFont(doc) {
+  const bytes = await loadJpFontBytes();
+  // window.fontkit is provided by the @pdf-lib/fontkit UMD bundle.
+  const fk = window.fontkit || (typeof fontkit !== "undefined" ? fontkit : null);
+  if (!fk) throw new Error("fontkit がロードされていません");
+  doc.registerFontkit(fk);
+  return await doc.embedFont(bytes, { subset: false });
+}
+
+// Coordinate system note:
+//   - Annotations are stored in PDF point space with origin at TOP-LEFT
+//     (i.e. native screen orientation). Conversion to pdf-lib (origin
+//     bottom-left) happens at bake time in burnAnnotationsIntoPdf().
+//   - SVG overlay uses a viewBox in PDF points, so coordinates map 1:1.
+
+// VIEW_SCALE is mutable so zoom in/out can change it at runtime.
+// All PDF-point ↔ CSS-px conversions reference it lazily (at call time).
+let VIEW_SCALE = 1.4;
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 4.0;
+const ZOOM_DEFAULT = 1.4;
+const ZOOM_STEP = 1.25;
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// Word-style comments: each page can have a right-side gutter (editor-only
+// visual) where comment boxes float. Leader lines connect an anchor point
+// inside the page to the comment box in the gutter. On export the comment
+// is baked onto the page (coordinates clamped to stay inside pageW).
+const GUTTER_PT        = 180;   // gutter width in PDF points
+const COMMENT_BOX_W_PT = 150;
+const COMMENT_BOX_H_PT = 60;
+const COMMENT_DEFAULT_COLOR = "#ffaa00";
+
+const state = {
+  pdfDoc: null,        // pdf-lib PDFDocument
+  pdfBytes: null,      // Uint8Array of saved doc (for PDF.js)
+  fileName: "document.pdf",
+  annotations: [],     // [[{type, ...}], ...]  index = page index
+  pageSizes: [],       // [{width, height}, ...] in PDF points
+  currentTool: "select",
+  toolColor: "#ff3030",
+  toolSize: 14,
+  // Per-tool size memory: switching tools restores that tool's last-used size.
+  // (text = font size, frame/pen/strikethrough = stroke width.)
+  toolSizes: {
+    text: 14,
+    frame: 2,
+    pen: 2,
+    strikethrough: 2,
+  },
+  selected: null,        // {pageIdx, index} of currently selected annotation
+  // Thumbnail multi-select state (feature: Shift/Cmd click + arrow keys)
+  selectedPages: new Set(),   // Set<number> of 0-based page indices
+  lastClickedPage: null,      // anchor for Shift range-select
+  selectionCursor: null,      // active edge for Shift+Arrow range extension
+  activeCommentKey: null,     // "pageIdx:idx" of the currently "active" comment
+                              // (shows fill handle + allows drag-move). Clicking
+                              // anywhere on a comment box activates it; clicking
+                              // outside any comment deactivates.
+};
+
+// ----- DOM refs -------------------------------------------------------------
+const viewer = document.getElementById("viewer");
+const strip = document.getElementById("strip");
+const welcome = document.getElementById("welcome");
+const info = document.getElementById("info");
+const btnSave = document.getElementById("btn-save");
+const btnPagenum = document.getElementById("btn-pagenum");
+const btnClear = document.getElementById("btn-clear");
+
+// ----- Toast ----------------------------------------------------------------
+function toast(msg, ms = 2000) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("show"), ms);
+}
+
+// ----- File loading ---------------------------------------------------------
+async function loadPdfFromFile(file) {
+  const buf = await file.arrayBuffer();
+  state.pdfDoc = await PDFDocument.load(buf);
+  state.pdfBytes = await state.pdfDoc.save();
+  state.fileName = file.name || "document.pdf";
+  state.annotations = state.pdfDoc.getPages().map(() => []);
+  state.selectedPages = new Set();
+  state.lastClickedPage = null;
+  state.selectionCursor = null;
+  // Also cache pageSizes up front (needed by comment creation before first persist).
+  state.pageSizes = state.pdfDoc.getPages().map(p => {
+    const { width, height } = p.getSize();
+    return { width, height };
+  });
+  await refresh();
+  toast(`${file.name} を読み込みました (${state.pdfDoc.getPageCount()} ページ)`);
+}
+
+async function appendPdfFromFile(file) {
+  if (!state.pdfDoc) return loadPdfFromFile(file);
+  const buf = await file.arrayBuffer();
+  const src = await PDFDocument.load(buf);
+  const indices = src.getPageIndices();
+  const copied = await state.pdfDoc.copyPages(src, indices);
+  copied.forEach(p => state.pdfDoc.addPage(p));
+  for (let i = 0; i < indices.length; i++) state.annotations.push([]);
+  await persist();
+  toast(`${file.name} を追加 (+${indices.length} ページ)`);
+}
+
+async function imagesToPdf(files) {
+  const doc = await PDFDocument.create();
+  for (const file of files) {
+    const buf = await file.arrayBuffer();
+    const img = file.type === "image/png" ? await doc.embedPng(buf) : await doc.embedJpg(buf);
+    const page = doc.addPage([img.width, img.height]);
+    page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+  }
+  state.pdfDoc = doc;
+  state.fileName = "images.pdf";
+  state.annotations = doc.getPages().map(() => []);
+  await persist();
+  toast(`${files.length} 枚の画像からPDFを生成`);
+}
+
+// Persist current pdfDoc → bytes, then reload + refresh UI.
+async function persist() {
+  state.pdfBytes = await state.pdfDoc.save();
+  state.pdfDoc = await PDFDocument.load(state.pdfBytes);
+  state.pageSizes = state.pdfDoc.getPages().map(p => {
+    const { width, height } = p.getSize();
+    return { width, height };
+  });
+  // Page operations invalidate any annotation selection (indices may shift).
+  state.selected = null;
+  state.activeCommentKey = null;
+  hidePropertyPanel();
+  await refresh();
+}
+
+// ----- Render ---------------------------------------------------------------
+async function refresh() {
+  const has = state.pdfDoc && state.pdfDoc.getPageCount() > 0;
+  btnSave.disabled = !has;
+  btnPagenum.disabled = !has;
+  btnClear.disabled = !has;
+  if (!has) {
+    viewer.innerHTML = "";
+    viewer.appendChild(welcome);
+    strip.innerHTML = "";
+    info.textContent = "PDFが読み込まれていません";
+    return;
+  }
+  if (welcome.parentNode) welcome.remove();
+  info.textContent = `${state.fileName} — ${state.pdfDoc.getPageCount()} ページ`;
+  await renderPages();
+  await renderThumbnails();
+}
+
+async function renderPages() {
+  viewer.innerHTML = "";
+  // Use a fresh copy because PDF.js may detach the buffer.
+  const pdfjsDoc = await pdfjsLib.getDocument({ data: state.pdfBytes.slice(0) }).promise;
+  for (let i = 1; i <= pdfjsDoc.numPages; i++) {
+    const page = await pdfjsDoc.getPage(i);
+    const viewport = page.getViewport({ scale: VIEW_SCALE });
+
+    const pdfW = viewport.width / VIEW_SCALE;
+    const pdfH = viewport.height / VIEW_SCALE;
+    const gutterCssW = GUTTER_PT * VIEW_SCALE;
+
+    // Outer container: page-frame. Width INCLUDES the gutter so that
+    // #viewer's align-items:center centers "page + gutter" as a unit —
+    // the gutter is reserved space on the right of the page. The comment
+    // gutter and leader-svg are absolutely positioned inside this frame
+    // (not flex children) so flex sizing rules cannot squish them.
+    const frame = document.createElement("div");
+    frame.className = "page-frame";
+    frame.dataset.pageIndex = String(i - 1);
+    frame.style.width = (viewport.width + gutterCssW) + "px";
+    frame.style.height = viewport.height + "px";
+
+    const wrap = document.createElement("div");
+    wrap.className = "page-wrap";
+    wrap.dataset.pageIndex = String(i - 1);
+    wrap.style.width = viewport.width + "px";
+    wrap.style.height = viewport.height + "px";
+
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    wrap.appendChild(canvas);
+
+    // SVG overlay in PDF point space (viewBox = page size).
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.classList.add("overlay");
+    svg.setAttribute("viewBox", `0 0 ${pdfW} ${pdfH}`);
+    svg.setAttribute("preserveAspectRatio", "none");
+    wrap.appendChild(svg);
+
+    frame.appendChild(wrap);
+
+    // Comment gutter — absolutely positioned immediately to the right of the
+    // page, OUTSIDE the flex-sizing calculations. It physically extends
+    // beyond page-frame's nominal box (which is only as wide as the page).
+    const gutter = document.createElement("div");
+    gutter.className = "comment-gutter";
+    gutter.dataset.pageIndex = String(i - 1);
+    gutter.style.left   = viewport.width + "px";        // right edge of page
+    gutter.style.width  = gutterCssW + "px";
+    gutter.style.height = viewport.height + "px";
+    frame.appendChild(gutter);
+
+    // Leader-line SVG spans page + gutter area. ViewBox is in PDF points
+    // so anchor (page coords) and boxX (may be > pdfW) map 1:1 with
+    // annotation storage. Absolutely positioned at frame origin, extends to
+    // the right past the frame's visible box (overflow: visible in CSS).
+    const leaderSvg = document.createElementNS(SVG_NS, "svg");
+    leaderSvg.classList.add("leader-svg");
+    leaderSvg.setAttribute("viewBox", `0 0 ${pdfW + GUTTER_PT} ${pdfH}`);
+    leaderSvg.setAttribute("preserveAspectRatio", "none");
+    leaderSvg.style.width  = (viewport.width + gutterCssW) + "px";
+    leaderSvg.style.height = viewport.height + "px";
+    frame.appendChild(leaderSvg);
+
+    viewer.appendChild(frame);
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+
+    // Render existing annotations and attach tool handlers.
+    drawAnnotationsForPage(i - 1);
+    attachToolHandlers(wrap, svg, i - 1);
+    applyToolModeToPage(wrap);
+  }
+}
+
+async function renderThumbnails() {
+  strip.innerHTML = "";
+  const pdfjsDoc = await pdfjsLib.getDocument({ data: state.pdfBytes.slice(0) }).promise;
+  for (let i = 1; i <= pdfjsDoc.numPages; i++) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "thumb";
+    wrapper.dataset.pageNum = String(i);
+
+    const canvas = document.createElement("canvas");
+    const page = await pdfjsDoc.getPage(i);
+    const baseViewport = page.getViewport({ scale: 1 });
+    const scale = Math.min(80 / baseViewport.width, 100 / baseViewport.height);
+    const viewport = page.getViewport({ scale });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    wrapper.appendChild(canvas);
+
+    const label = document.createElement("div");
+    label.className = "thumb-label";
+    label.textContent = String(i);
+    wrapper.appendChild(label);
+
+    const del = document.createElement("button");
+    del.className = "thumb-del";
+    del.textContent = "×";
+    del.title = "ページを削除";
+    del.addEventListener("pointerdown", e => e.stopPropagation());
+    del.addEventListener("click", e => {
+      e.stopPropagation();
+      deletePage(parseInt(wrapper.dataset.pageNum));
+    });
+    wrapper.appendChild(del);
+
+    wrapper.addEventListener("click", (e) => {
+      if (wrapper._suppressClick) { wrapper._suppressClick = false; return; }
+      const pageIdx = parseInt(wrapper.dataset.pageNum) - 1;
+      handleThumbClick(pageIdx, e);
+      // Only scroll into view on plain click (no modifier).
+      if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        const wraps = viewer.querySelectorAll(".page-wrap");
+        const target = wraps[pageIdx];
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+
+    attachThumbnailDrag(wrapper);
+    strip.appendChild(wrapper);
+  }
+  updateThumbSelectionClass();
+}
+
+// ---------- Thumbnail selection helpers -------------------------------------
+function handleThumbClick(pageIdx, evt) {
+  const total = state.pdfDoc ? state.pdfDoc.getPageCount() : 0;
+  if (pageIdx < 0 || pageIdx >= total) return;
+  if (evt.shiftKey && state.lastClickedPage !== null) {
+    // Range select from anchor to target; cursor = clicked idx
+    const a = Math.min(state.lastClickedPage, pageIdx);
+    const b = Math.max(state.lastClickedPage, pageIdx);
+    state.selectedPages = new Set();
+    for (let i = a; i <= b; i++) state.selectedPages.add(i);
+    state.selectionCursor = pageIdx;
+  } else if (evt.ctrlKey || evt.metaKey) {
+    // Toggle individual; move anchor + cursor to the clicked page
+    if (state.selectedPages.has(pageIdx)) state.selectedPages.delete(pageIdx);
+    else state.selectedPages.add(pageIdx);
+    state.lastClickedPage = pageIdx;
+    state.selectionCursor = pageIdx;
+  } else {
+    // Plain click: single-select; anchor + cursor = this page
+    state.selectedPages = new Set([pageIdx]);
+    state.lastClickedPage = pageIdx;
+    state.selectionCursor = pageIdx;
+  }
+  updateThumbSelectionClass();
+}
+
+function updateThumbSelectionClass() {
+  const thumbs = strip.querySelectorAll(".thumb");
+  thumbs.forEach(t => {
+    const idx = parseInt(t.dataset.pageNum) - 1;
+    t.classList.toggle("multi-selected", state.selectedPages.has(idx));
+  });
+}
+
+/** After a reorder, rebuild selectedPages by mapping old indices → new indices. */
+function remapSelectedPages(oldToNew) {
+  const next = new Set();
+  for (const oldIdx of state.selectedPages) {
+    if (oldToNew[oldIdx] !== undefined) next.add(oldToNew[oldIdx]);
+  }
+  state.selectedPages = next;
+  if (state.lastClickedPage !== null && oldToNew[state.lastClickedPage] !== undefined) {
+    state.lastClickedPage = oldToNew[state.lastClickedPage];
+  } else {
+    state.lastClickedPage = null;
+  }
+  if (state.selectionCursor !== null && state.selectionCursor !== undefined
+      && oldToNew[state.selectionCursor] !== undefined) {
+    state.selectionCursor = oldToNew[state.selectionCursor];
+  } else {
+    state.selectionCursor = state.lastClickedPage;
+  }
+}
+
+// ============================================================================
+// Pointer-based drag-and-drop reorder (window-level listeners for reliability)
+// ============================================================================
+function attachThumbnailDrag(wrapper) {
+  const THRESHOLD = 5;
+
+  wrapper.addEventListener("pointerdown", (downEvt) => {
+    if (downEvt.button !== 0 && downEvt.pointerType === "mouse") return;
+    if (downEvt.target.closest(".thumb-del")) return;
+    // Modifier-held click is selection intent, not drag — let the click
+    // handler manage it.
+    if (downEvt.shiftKey || downEvt.ctrlKey || downEvt.metaKey) return;
+    downEvt.preventDefault();
+
+    const pageIdx = parseInt(wrapper.dataset.pageNum) - 1;
+    // Group drag if clicking on a thumb that is already part of the
+    // multi-selection. Otherwise: plain single-drag (and implicitly reset
+    // selection to just this page so UI stays coherent).
+    let isGroup = state.selectedPages.has(pageIdx) && state.selectedPages.size > 1;
+    if (!isGroup) {
+      state.selectedPages = new Set([pageIdx]);
+      state.lastClickedPage = pageIdx;
+      updateThumbSelectionClass();
+    }
+    const groupSize = state.selectedPages.size;
+
+    const startX = downEvt.clientX;
+    const startY = downEvt.clientY;
+    let dragging = false;
+    let ghost = null;
+    let indicator = null;
+
+    const startDrag = (e) => {
+      dragging = true;
+      // Visually dim all selected thumbs during drag.
+      strip.querySelectorAll(".thumb").forEach(t => {
+        const idx = parseInt(t.dataset.pageNum) - 1;
+        if (state.selectedPages.has(idx)) t.classList.add("dragging");
+      });
+      ghost = wrapper.cloneNode(true);
+      ghost.classList.remove("thumb");
+      ghost.classList.add("thumb-ghost");
+      const dl = ghost.querySelector(".thumb-del");
+      if (dl) dl.remove();
+      if (groupSize > 1) {
+        const badge = document.createElement("div");
+        badge.className = "thumb-ghost-badge";
+        badge.textContent = `${groupSize}`;
+        ghost.appendChild(badge);
+      }
+      document.body.appendChild(ghost);
+      moveGhost(e);
+      indicator = document.createElement("div");
+      indicator.className = "drop-indicator";
+      strip.appendChild(indicator);
+    };
+
+    const moveGhost = (e) => {
+      ghost.style.left = (e.clientX - 42) + "px";
+      ghost.style.top = (e.clientY - 55) + "px";
+    };
+
+    const onMove = (e) => {
+      if (!dragging) {
+        if (Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) < THRESHOLD) return;
+        startDrag(e);
+      }
+      moveGhost(e);
+      const stripRect = strip.getBoundingClientRect();
+      if (e.clientX < stripRect.left + 50) strip.scrollLeft -= 14;
+      else if (e.clientX > stripRect.right - 50) strip.scrollLeft += 14;
+      const target = computeDropTarget(e.clientX);
+      updateIndicator(indicator, target);
+    };
+
+    const onUp = (e) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+
+      // Always clean visual state on up
+      strip.querySelectorAll(".thumb.dragging").forEach(t => t.classList.remove("dragging"));
+      if (ghost) ghost.remove();
+      if (indicator) indicator.remove();
+
+      if (!dragging) return;
+
+      const target = computeDropTarget(e.clientX);
+      const insertIdx = target.insertIndex;
+      wrapper._suppressClick = true;
+
+      const sources = Array.from(state.selectedPages).sort((a, b) => a - b);
+      reorderPdfMany(sources, insertIdx);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+}
+
+function computeDropTarget(clientX) {
+  const items = Array.from(strip.querySelectorAll(".thumb"));
+  let insertIndex = items.length;
+  for (let i = 0; i < items.length; i++) {
+    const r = items[i].getBoundingClientRect();
+    if (clientX < r.left + r.width / 2) { insertIndex = i; break; }
+  }
+  return { insertIndex, items };
+}
+
+function updateIndicator(indicator, target) {
+  if (!indicator) return;
+  const items = target.items;
+  if (items.length === 0) return;
+  const stripRect = strip.getBoundingClientRect();
+  let xv;
+  if (target.insertIndex >= items.length) {
+    xv = items[items.length - 1].getBoundingClientRect().right + 4;
+  } else {
+    xv = items[target.insertIndex].getBoundingClientRect().left - 4;
+  }
+  indicator.style.left = (xv - stripRect.left + strip.scrollLeft) + "px";
+}
+
+// ============================================================================
+// PDF mutation operations
+// ============================================================================
+async function reorderPdf(sourceIdx, insertIdx) {
+  return reorderPdfMany([sourceIdx], insertIdx);
+}
+
+/**
+ * Move multiple pages (sourceIndices, **must be unique + pre-sorted asc**)
+ * to the given insertion point (insertIdx is expressed in the pre-move index
+ * space, same convention as reorderPdf). If the insertion point falls inside
+ * the block of moved pages it becomes a no-op.
+ */
+async function reorderPdfMany(sourceIndices, insertIdx) {
+  if (!Array.isArray(sourceIndices) || sourceIndices.length === 0) return;
+  const total = state.pdfDoc.getPageCount();
+  const sources = Array.from(new Set(sourceIndices)).sort((a, b) => a - b);
+  if (sources.some(i => i < 0 || i >= total)) return;
+
+  // Build the "remaining" order (without the sources) and the moved block.
+  const srcSet = new Set(sources);
+  const remaining = [];
+  for (let i = 0; i < total; i++) if (!srcSet.has(i)) remaining.push(i);
+  const moved = sources.slice();   // preserve ascending order within block
+
+  // Adjust insertIdx: it was computed in the pre-move index space; subtract
+  // the count of sources that sit strictly before it.
+  let target = insertIdx;
+  const shiftedBy = sources.filter(i => i < insertIdx).length;
+  target -= shiftedBy;
+  if (target < 0) target = 0;
+  if (target > remaining.length) target = remaining.length;
+
+  // If inserting at the same location the block already occupies, skip.
+  const newOrder = remaining.slice();
+  newOrder.splice(target, 0, ...moved);
+  const unchanged = newOrder.every((v, i) => v === i);
+  if (unchanged) return;
+
+  // Reorder annotations to match and remap selectedPages.
+  const newAnnotations = newOrder.map(idx => state.annotations[idx] || []);
+  const oldToNew = {};
+  newOrder.forEach((oldIdx, newIdx) => { oldToNew[oldIdx] = newIdx; });
+
+  const newDoc = await PDFDocument.create();
+  const copied = await newDoc.copyPages(state.pdfDoc, newOrder);
+  copied.forEach(p => newDoc.addPage(p));
+  state.pdfDoc = newDoc;
+  state.annotations = newAnnotations;
+
+  // persist() nulls state.selected and reloads — save the selectedPages
+  // remap behind its back.
+  remapSelectedPages(oldToNew);
+  const preservedSelection = new Set(state.selectedPages);
+  const preservedAnchor = state.lastClickedPage;
+  const preservedCursor = state.selectionCursor;
+  await persist();
+  state.selectedPages = preservedSelection;
+  state.lastClickedPage = preservedAnchor;
+  state.selectionCursor = preservedCursor;
+  updateThumbSelectionClass();
+  toast(sources.length > 1
+    ? `${sources.length} ページをまとめて並べ替え`
+    : "ページを並べ替えました");
+}
+
+async function deletePage(pageNum) {
+  if (state.pdfDoc.getPageCount() <= 1) {
+    toast("最後のページは削除できません");
+    return;
+  }
+  if (!confirm(`ページ ${pageNum} を削除しますか？`)) return;
+  const removedIdx = pageNum - 1;
+  state.pdfDoc.removePage(removedIdx);
+  state.annotations.splice(removedIdx, 1);
+  // Remap multi-selection: drop removed idx, shift anything above it down 1.
+  const next = new Set();
+  for (const i of state.selectedPages) {
+    if (i === removedIdx) continue;
+    next.add(i > removedIdx ? i - 1 : i);
+  }
+  state.selectedPages = next;
+  if (state.lastClickedPage === removedIdx) state.lastClickedPage = null;
+  else if (state.lastClickedPage !== null && state.lastClickedPage > removedIdx) {
+    state.lastClickedPage -= 1;
+  }
+  await persist();
+  toast(`ページ ${pageNum} を削除`);
+}
+
+/** Delete multiple pages at once using the current multi-selection. */
+async function deletePagesMany(indices) {
+  if (!state.pdfDoc) return;
+  const total = state.pdfDoc.getPageCount();
+  const sources = Array.from(new Set(indices))
+    .filter(i => Number.isInteger(i) && i >= 0 && i < total)
+    .sort((a, b) => a - b);
+  if (sources.length === 0) return;
+  if (sources.length >= total) {
+    toast("すべてのページは削除できません");
+    return;
+  }
+  const msg = sources.length === 1
+    ? `ページ ${sources[0] + 1} を削除しますか？`
+    : `選択中の ${sources.length} ページを削除しますか？`;
+  if (!confirm(msg)) return;
+  // Delete in DESCENDING order so earlier indices stay valid as we splice.
+  for (let i = sources.length - 1; i >= 0; i--) {
+    const idx = sources[i];
+    state.pdfDoc.removePage(idx);
+    state.annotations.splice(idx, 1);
+  }
+  state.selectedPages = new Set();
+  state.lastClickedPage = null;
+  state.selectionCursor = null;
+  await persist();
+  toast(`${sources.length} ページを削除しました`);
+}
+
+// ============================================================================
+// Annotation tools
+// ============================================================================
+function setTool(name) {
+  state.currentTool = name;
+  // Restore this tool's last-used size into the shared size input.
+  if (state.toolSizes[name] !== undefined) {
+    state.toolSize = state.toolSizes[name];
+    const sizeInput = document.getElementById("tool-size");
+    if (sizeInput) sizeInput.value = state.toolSize;
+  }
+  document.querySelectorAll(".tb-btn.tool").forEach(b => {
+    b.classList.toggle("active", b.dataset.tool === name);
+  });
+  document.querySelectorAll(".page-wrap").forEach(applyToolModeToPage);
+}
+
+function applyToolModeToPage(wrap) {
+  wrap.classList.toggle("tool-active", state.currentTool !== "select");
+  wrap.classList.toggle("tool-text", state.currentTool === "text");
+  wrap.classList.toggle("tool-eraser", state.currentTool === "eraser");
+}
+
+// Convert a pointer event to PDF point coordinates relative to the SVG.
+function pointToPdf(svg, e) {
+  const rect = svg.getBoundingClientRect();
+  const pdfW = parseFloat(svg.viewBox.baseVal.width);
+  const pdfH = parseFloat(svg.viewBox.baseVal.height);
+  const x = (e.clientX - rect.left) / rect.width * pdfW;
+  const y = (e.clientY - rect.top) / rect.height * pdfH;
+  return { x, y };
+}
+
+// ----- Text wrapping helpers ------------------------------------------------
+// A single shared offscreen canvas context is used to measure text widths
+// in screen CSS pixels, then converted to PDF points via VIEW_SCALE.
+const _measureCanvas = document.createElement("canvas");
+const _measureCtx = _measureCanvas.getContext("2d");
+const TEXT_FONT_STACK =
+  '"Hiragino Sans", "Noto Sans JP", "Helvetica", Arial, sans-serif';
+const TEXT_LINE_HEIGHT = 1.25;
+const TEXT_DEFAULT_WIDTH_PT = 200;
+
+// Tracks the most recent annotation pointerdown so we can detect a
+// double-click even when the second press lands on the selection chrome
+// (.sel-move overlay) instead of the original .annot DOM element.
+// Browsers do not fire `dblclick` if click1 and click2 have different targets,
+// so we implement our own timing-based double-click detection.
+const DOUBLE_CLICK_MS = 400;
+let lastPointerDownInfo = { time: 0, pageIdx: -1, idx: -1 };
+
+/** Measure the width of *text* at *fontSize* (PDF points). Returns PDF points. */
+function measureTextWidth(text, fontSize) {
+  // Canvas font sizes are in CSS pixels; our fontSize is in PDF points.
+  _measureCtx.font = `${fontSize * VIEW_SCALE}px ${TEXT_FONT_STACK}`;
+  return _measureCtx.measureText(text).width / VIEW_SCALE;
+}
+
+/**
+ * Wrap *text* into lines so that no line exceeds *maxWidth* (PDF points).
+ * Honors explicit \n line breaks. Wraps at character boundary, which works
+ * for both Japanese (no spaces) and English (still breaks cleanly).
+ */
+function wrapTextToLines(text, maxWidth, fontSize) {
+  const lines = [];
+  const paragraphs = (text || "").split("\n");
+  for (const para of paragraphs) {
+    if (para.length === 0) { lines.push(""); continue; }
+    let current = "";
+    for (const ch of para) {
+      const tentative = current + ch;
+      if (current && measureTextWidth(tentative, fontSize) > maxWidth) {
+        lines.push(current);
+        current = ch;
+      } else {
+        current = tentative;
+      }
+    }
+    lines.push(current);
+  }
+  return lines.length ? lines : [""];
+}
+
+/**
+ * Upgrade pre-existing text annotations (which used y=baseline and had no
+ * explicit width) to the new top-of-box + width model.
+ */
+function migrateTextAnnotation(ann) {
+  if (ann.type !== "text") return;
+  if (ann.w === undefined) {
+    const measured = measureTextWidth(ann.text || "", ann.fontSize || 14);
+    ann.w = Math.max(50, measured + 8);
+    // Old y was baseline of the single line. Shift up to top-of-box.
+    ann.y = (ann.y || 0) - (ann.fontSize || 14);
+  }
+}
+
+/**
+ * Update the <g> element holding the two parallel lines of a strikethrough
+ * annotation. The two lines are offset by `gap/2` perpendicular to the
+ * drag direction so they always look like a clean double strikethrough,
+ * even when drawn at an angle.
+ */
+function updateStrikethroughEl(g, ann) {
+  const dx = ann.x2 - ann.x1;
+  const dy = ann.y2 - ann.y1;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const nx = -dy / len;   // unit perpendicular x
+  const ny = dx / len;    // unit perpendicular y
+  const off = (ann.gap ?? 2.5) / 2;
+  const lines = g.querySelectorAll("line");
+  [off, -off].forEach((s, i) => {
+    const l = lines[i];
+    l.setAttribute("x1", ann.x1 + nx * s);
+    l.setAttribute("y1", ann.y1 + ny * s);
+    l.setAttribute("x2", ann.x2 + nx * s);
+    l.setAttribute("y2", ann.y2 + ny * s);
+    l.setAttribute("stroke", ann.color);
+    l.setAttribute("stroke-width", ann.strokeWidth);
+    l.setAttribute("stroke-opacity", String(ann.opacity ?? 1));
+    l.setAttribute("stroke-linecap", "round");
+  });
+}
+
+function attachToolHandlers(wrap, svg, pageIdx) {
+  let drawingAnnot = null;     // in-progress annotation object
+  let drawingEl = null;        // in-progress SVG element
+
+  // Delegated dblclick: any double-click on a text annotation (regardless
+  // of which inner element received the click, or which tool is active)
+  // re-opens the text editor. Delegation on <svg> survives .annot DOM
+  // recreation, which the browser needs for reliable dblclick detection.
+  svg.addEventListener("dblclick", (e) => {
+    const hit = e.target.closest(".annot");
+    if (!hit || hit.dataset.annotIndex === undefined) return;
+    const hitIdx = parseInt(hit.dataset.annotIndex);
+    const ann = state.annotations[pageIdx][hitIdx];
+    if (!ann || ann.type !== "text") return;
+    e.preventDefault();
+    e.stopPropagation();
+    // Make sure the text is selected first (in case it wasn't).
+    if (state.currentTool !== "select") setTool("select");
+    selectAnnotation(pageIdx, hitIdx);
+    editTextAnnotation(pageIdx, hitIdx);
+  });
+
+  svg.addEventListener("pointerdown", (e) => {
+    // Click-to-select: if the pointerdown hits an existing annotation
+    // (any tool mode), select it instead of drawing a new one.
+    const hit = e.target.closest(".annot");
+    if (hit && hit.dataset.annotIndex !== undefined) {
+      const hitIdx = parseInt(hit.dataset.annotIndex);
+      if (state.currentTool === "eraser") {
+        // Eraser deletes immediately; no click needed afterwards.
+        e.preventDefault();
+        e.stopPropagation();
+        deleteAnnotationAt(pageIdx, hitIdx);
+        return;
+      }
+
+      // Detect our own "double-click" via timestamp tracking. Browser
+      // dblclick is unreliable here because the selection chrome (.sel-move)
+      // appears on top after the first click, so the second press hits a
+      // different DOM element — breaking native dblclick.
+      const now = Date.now();
+      const isDouble =
+        (now - lastPointerDownInfo.time) < DOUBLE_CLICK_MS &&
+        lastPointerDownInfo.pageIdx === pageIdx &&
+        lastPointerDownInfo.idx === hitIdx;
+      lastPointerDownInfo = { time: now, pageIdx, idx: hitIdx };
+
+      if (isDouble) {
+        const ann = state.annotations[pageIdx][hitIdx];
+        if (ann && ann.type === "text") {
+          e.preventDefault();
+          e.stopPropagation();
+          lastPointerDownInfo.time = 0; // reset to avoid triple-click edge cases
+          if (state.currentTool !== "select") setTool("select");
+          selectAnnotation(pageIdx, hitIdx);
+          editTextAnnotation(pageIdx, hitIdx);
+          return;
+        }
+      }
+
+      // For drawing tools, flip to select mode so the property panel is usable.
+      if (state.currentTool !== "select") setTool("select");
+      selectAnnotation(pageIdx, hitIdx);
+      // stopPropagation only (no preventDefault) — allows click events.
+      e.stopPropagation();
+      return;
+    }
+
+    if (state.currentTool === "select") {
+      // Empty-area press in select mode: deselect the current selection
+      // (shape editor commit behavior). Runs in pointerdown — NOT in
+      // onclick — because click fires spuriously after drag-to-create.
+      if (state.selected) {
+        deselectAnnotation();
+      }
+      return;
+    }
+    e.preventDefault();
+    const p = pointToPdf(svg, e);
+
+    if (state.currentTool === "eraser") {
+      // handled by per-annotation click; nothing to do here
+      return;
+    }
+
+    if (state.currentTool === "text") {
+      // Show a floating input field at this location.
+      openTextInput(wrap, e, pageIdx, p);
+      return;
+    }
+
+    if (state.currentTool === "comment") {
+      // Drag-to-draw an anchor RECTANGLE (instead of a single point).
+      // If the user just clicks without dragging, the rect collapses to a
+      // zero-size box and falls back to point-anchor behavior on commit.
+      drawingAnnot = {
+        type: "comment",
+        x: p.x, y: p.y, w: 0, h: 0,
+        // rest of the fields are filled in at finishDraw
+      };
+      drawingEl = document.createElementNS(SVG_NS, "rect");
+      drawingEl.setAttribute("x", p.x);
+      drawingEl.setAttribute("y", p.y);
+      drawingEl.setAttribute("width", 0);
+      drawingEl.setAttribute("height", 0);
+      drawingEl.setAttribute("fill", COMMENT_DEFAULT_COLOR);
+      drawingEl.setAttribute("fill-opacity", "0.15");
+      drawingEl.setAttribute("stroke", COMMENT_DEFAULT_COLOR);
+      drawingEl.setAttribute("stroke-width", "1");
+      drawingEl.setAttribute("stroke-dasharray", "3 2");
+      drawingEl.setAttribute("vector-effect", "non-scaling-stroke");
+      svg.appendChild(drawingEl);
+    } else if (state.currentTool === "highlight") {
+      drawingAnnot = {
+        type: "highlight",
+        x: p.x, y: p.y, w: 0, h: 0,
+        color: state.toolColor,
+        opacity: 0.4,
+      };
+      drawingEl = document.createElementNS(SVG_NS, "rect");
+      drawingEl.setAttribute("x", p.x);
+      drawingEl.setAttribute("y", p.y);
+      drawingEl.setAttribute("width", 0);
+      drawingEl.setAttribute("height", 0);
+      drawingEl.setAttribute("fill", state.toolColor);
+      drawingEl.setAttribute("fill-opacity", "0.4");
+      svg.appendChild(drawingEl);
+    } else if (state.currentTool === "frame") {
+      drawingAnnot = {
+        type: "frame",
+        x: p.x, y: p.y, w: 0, h: 0,
+        color: state.toolColor,
+        strokeWidth: state.toolSize / VIEW_SCALE,
+        opacity: 1,
+      };
+      drawingEl = document.createElementNS(SVG_NS, "rect");
+      drawingEl.setAttribute("x", p.x);
+      drawingEl.setAttribute("y", p.y);
+      drawingEl.setAttribute("width", 0);
+      drawingEl.setAttribute("height", 0);
+      drawingEl.setAttribute("fill", "none");
+      drawingEl.setAttribute("stroke", state.toolColor);
+      drawingEl.setAttribute("stroke-width", drawingAnnot.strokeWidth);
+      svg.appendChild(drawingEl);
+    } else if (state.currentTool === "strikethrough") {
+      drawingAnnot = {
+        type: "strikethrough",
+        x1: p.x, y1: p.y, x2: p.x, y2: p.y,
+        color: state.toolColor,
+        strokeWidth: state.toolSize / VIEW_SCALE,
+        gap: 2.5,
+        opacity: 1,
+      };
+      drawingEl = document.createElementNS(SVG_NS, "g");
+      drawingEl.appendChild(document.createElementNS(SVG_NS, "line"));
+      drawingEl.appendChild(document.createElementNS(SVG_NS, "line"));
+      updateStrikethroughEl(drawingEl, drawingAnnot);
+      svg.appendChild(drawingEl);
+    } else if (state.currentTool === "pen") {
+      drawingAnnot = {
+        type: "pen",
+        points: [[p.x, p.y]],
+        color: state.toolColor,
+        width: state.toolSize / VIEW_SCALE,
+        opacity: 1,
+      };
+      drawingEl = document.createElementNS(SVG_NS, "polyline");
+      drawingEl.setAttribute("fill", "none");
+      drawingEl.setAttribute("stroke", state.toolColor);
+      drawingEl.setAttribute("stroke-width", drawingAnnot.width);
+      drawingEl.setAttribute("stroke-linecap", "round");
+      drawingEl.setAttribute("stroke-linejoin", "round");
+      drawingEl.setAttribute("points", `${p.x},${p.y}`);
+      svg.appendChild(drawingEl);
+    }
+
+    if (drawingEl) {
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  });
+
+  svg.addEventListener("pointermove", (e) => {
+    if (!drawingAnnot) return;
+    const p = pointToPdf(svg, e);
+    if (drawingAnnot.type === "highlight" || drawingAnnot.type === "frame" || drawingAnnot.type === "comment") {
+      const x = Math.min(drawingAnnot.x, p.x);
+      const y = Math.min(drawingAnnot.y, p.y);
+      const w = Math.abs(p.x - drawingAnnot.x);
+      const h = Math.abs(p.y - drawingAnnot.y);
+      drawingEl.setAttribute("x", x);
+      drawingEl.setAttribute("y", y);
+      drawingEl.setAttribute("width", w);
+      drawingEl.setAttribute("height", h);
+      drawingAnnot._final = { x, y, w, h };
+    } else if (drawingAnnot.type === "strikethrough") {
+      drawingAnnot.x2 = p.x;
+      drawingAnnot.y2 = p.y;
+      updateStrikethroughEl(drawingEl, drawingAnnot);
+    } else if (drawingAnnot.type === "pen") {
+      drawingAnnot.points.push([p.x, p.y]);
+      drawingEl.setAttribute("points",
+        drawingAnnot.points.map(pt => pt.join(",")).join(" "));
+    }
+  });
+
+  const finishDraw = (e) => {
+    if (!drawingAnnot) return;
+    try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+    let savedIdx = -1;
+    if (drawingAnnot.type === "highlight" || drawingAnnot.type === "frame") {
+      // Keep any non-degenerate rectangle. Only a pure click (no drag at all)
+      // is discarded — actual drags, even small ones, are preserved so the
+      // user doesn't lose their shape.
+      if (drawingAnnot._final && drawingAnnot._final.w > 0 && drawingAnnot._final.h > 0) {
+        // Enforce a small minimum so the shape remains visible/selectable.
+        if (drawingAnnot._final.w < 4) drawingAnnot._final.w = 4;
+        if (drawingAnnot._final.h < 4) drawingAnnot._final.h = 4;
+        Object.assign(drawingAnnot, drawingAnnot._final);
+        delete drawingAnnot._final;
+        state.annotations[pageIdx].push(drawingAnnot);
+        savedIdx = state.annotations[pageIdx].length - 1;
+        drawingEl.remove();
+        drawAnnotationsForPage(pageIdx);
+      } else {
+        drawingEl.remove();
+      }
+    } else if (drawingAnnot.type === "strikethrough") {
+      const dx = drawingAnnot.x2 - drawingAnnot.x1;
+      const dy = drawingAnnot.y2 - drawingAnnot.y1;
+      if (Math.sqrt(dx * dx + dy * dy) >= 1) {
+        state.annotations[pageIdx].push(drawingAnnot);
+        savedIdx = state.annotations[pageIdx].length - 1;
+        drawingEl.remove();
+        drawAnnotationsForPage(pageIdx);
+      } else {
+        drawingEl.remove();
+      }
+    } else if (drawingAnnot.type === "pen") {
+      if (drawingAnnot.points.length >= 2) {
+        state.annotations[pageIdx].push(drawingAnnot);
+        savedIdx = state.annotations[pageIdx].length - 1;
+        drawingEl.remove();
+        drawAnnotationsForPage(pageIdx);
+      } else {
+        drawingEl.remove();
+      }
+    } else if (drawingAnnot.type === "comment") {
+      // Commit the comment. If the user dragged, drawingAnnot._final has
+      // the rect; otherwise it's a simple click (w=0, h=0) → point anchor.
+      const rect = drawingAnnot._final || {
+        x: drawingAnnot.x, y: drawingAnnot.y, w: 0, h: 0,
+      };
+      drawingEl.remove();
+      createCommentAnnotation(pageIdx, rect);
+    }
+    drawingAnnot = null;
+    drawingEl = null;
+    // Auto-select the just-created annotation so the user can immediately
+    // resize / recolor / delete via the property panel.
+    if (savedIdx >= 0) selectAnnotation(pageIdx, savedIdx);
+  };
+  svg.addEventListener("pointerup", finishDraw);
+  svg.addEventListener("pointercancel", finishDraw);
+}
+
+/**
+ * Open a floating textarea for creating a new text annotation at (pdfPoint).
+ * The textarea auto-grows vertically as the user types and uses the current
+ * tool color / font size. Enter commits (Shift+Enter inserts a newline).
+ */
+function openTextInput(wrap, evt, pageIdx, pdfPoint) {
+  // Starting a brand-new text input must clear any prior selection, otherwise
+  // pressing the property panel's delete button while the (still-empty) input
+  // is focused would delete the previously confirmed annotation.
+  if (state.selected) deselectAnnotation();
+
+  const fontSizePdf = state.toolSize / VIEW_SCALE;
+  const widthPdf = TEXT_DEFAULT_WIDTH_PT;
+  openTextEditor(wrap, pageIdx, {
+    xPdf: pdfPoint.x,
+    yPdf: pdfPoint.y,
+    widthPdf,
+    fontSizePdf,
+    color: state.toolColor,
+    initialText: "",
+    editIdx: null,
+  });
+}
+
+/**
+ * Shared textarea editor used for both creating a new text annotation and
+ * re-editing an existing one. Handles IME, auto-grow, Enter-to-commit,
+ * Shift+Enter for newline, and Escape to cancel.
+ */
+function openTextEditor(wrap, pageIdx, opts) {
+  const wrapRect = wrap.getBoundingClientRect();
+  const leftCss = opts.xPdf * VIEW_SCALE;
+  const topCss = opts.yPdf * VIEW_SCALE;
+  const widthCss = opts.widthPdf * VIEW_SCALE;
+  const fontCss = opts.fontSizePdf * VIEW_SCALE;
+
+  const ta = document.createElement("textarea");
+  ta.className = "text-input-floating";
+  ta.style.position = "absolute";
+  ta.style.left = leftCss + "px";
+  ta.style.top = topCss + "px";
+  ta.style.width = widthCss + "px";
+  ta.style.color = opts.color;
+  ta.style.fontSize = fontCss + "px";
+  ta.style.lineHeight = String(TEXT_LINE_HEIGHT);
+  ta.style.fontFamily = TEXT_FONT_STACK;
+  ta.style.resize = "none";
+  ta.style.overflow = "hidden";
+  ta.setAttribute("autocomplete", "off");
+  ta.setAttribute("autocorrect", "off");
+  ta.setAttribute("spellcheck", "false");
+  ta.rows = 1;
+  ta.placeholder = "テキスト (Enter で確定 / Shift+Enter で改行)";
+  ta.value = opts.initialText || "";
+  wrap.appendChild(ta);
+
+  const autoGrow = () => {
+    ta.style.height = "auto";
+    ta.style.height = (ta.scrollHeight + 2) + "px";
+  };
+  ta.addEventListener("input", autoGrow);
+
+  ta.focus();
+  // Place cursor at end if editing existing text.
+  if (opts.editIdx !== null && opts.initialText) {
+    ta.selectionStart = ta.selectionEnd = opts.initialText.length;
+  }
+  autoGrow();
+
+  let committed = false;
+  let cancelled = false;
+  let composing = false;
+
+  const commit = () => {
+    if (committed) return;
+    committed = true;
+    const text = cancelled ? "" : ta.value;
+    ta.remove();
+    if (opts.editIdx !== null) {
+      // Edit mode: empty text keeps original; non-empty updates.
+      if (text.trim()) {
+        state.annotations[pageIdx][opts.editIdx].text = text;
+        drawAnnotationsForPage(pageIdx);
+        selectAnnotation(pageIdx, opts.editIdx);
+      }
+      return;
+    }
+    // Create mode.
+    if (!text.trim()) return;
+    state.annotations[pageIdx].push({
+      type: "text",
+      x: opts.xPdf,
+      y: opts.yPdf,
+      w: opts.widthPdf,
+      text,
+      fontSize: opts.fontSizePdf,
+      color: opts.color,
+      opacity: 1,
+    });
+    drawAnnotationsForPage(pageIdx);
+    selectAnnotation(pageIdx, state.annotations[pageIdx].length - 1);
+  };
+
+  ta.addEventListener("compositionstart", () => { composing = true; });
+  ta.addEventListener("compositionend", () => { composing = false; });
+  ta.addEventListener("blur", commit);
+  ta.addEventListener("keydown", (e) => {
+    // While IME is composing, let the browser/IME handle the key.
+    if (composing || e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      ta.blur();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelled = true;
+      ta.blur();
+    }
+    // Shift+Enter falls through → textarea inserts a newline.
+  });
+}
+
+// ============================================================================
+// Word-style margin comments
+// ============================================================================
+/**
+ * Create a new comment annotation on a page.
+ * @param rect {x, y, w, h} — the anchor rectangle in PDF points (top-left).
+ *             If w === 0 and h === 0 the anchor is rendered as a single
+ *             point (backward compatible with the old point-click behavior).
+ */
+function createCommentAnnotation(pageIdx, rect) {
+  // Place the new box at the top of the gutter, shifted down if others exist.
+  const existing = (state.annotations[pageIdx] || []).filter(a => a.type === "comment");
+  // Use the actual rendered page width (pdf.js viewport) so the comment
+  // lands exactly at the right edge of the visible page.
+  const pageFrame = viewer.querySelector(`.page-frame[data-page-index="${pageIdx}"]`);
+  const pageWrap = pageFrame && pageFrame.querySelector(".page-wrap");
+  let pdfW;
+  if (pageWrap) {
+    pdfW = parseFloat(pageWrap.style.width) / VIEW_SCALE;
+  } else {
+    const pageSize = state.pageSizes[pageIdx] || { width: 595, height: 842 };
+    pdfW = pageSize.width;
+  }
+  const boxX = pdfW + 10;                            // 10 pt inside gutter
+  // Vertical alignment: center comment box on the anchor rect's mid-Y
+  const anchorMidY = rect.y + (rect.h || 0) / 2;
+  const boxY = Math.max(10, anchorMidY - COMMENT_BOX_H_PT / 2);
+  // Stagger vertically if another comment overlaps.
+  let finalY = boxY;
+  existing.forEach(() => { finalY += 10; });
+  const ann = {
+    type: "comment",
+    x: rect.x, y: rect.y, w: rect.w || 0, h: rect.h || 0,  // anchor rect
+    boxX, boxY: finalY,
+    boxW: COMMENT_BOX_W_PT,
+    boxH: COMMENT_BOX_H_PT,
+    text: "",
+    replies: [],
+    color: COMMENT_DEFAULT_COLOR,
+    fontSize: 11,
+    opacity: 1,
+  };
+  const newIdx = state.annotations[pageIdx].push(ann) - 1;
+  // Auto-activate the newly-created comment so its fill handle / drag
+  // affordances are visible immediately.
+  state.activeCommentKey = `${pageIdx}:${newIdx}`;
+  drawAnnotationsForPage(pageIdx);
+  // Focus the new comment body for immediate typing.
+  if (pageFrame) {
+    const boxes = pageFrame.querySelectorAll(".comment-box");
+    const last = boxes[boxes.length - 1];
+    if (last) {
+      const body = last.querySelector(".cb-body");
+      if (body) body.focus();
+    }
+  }
+}
+
+/** Min box size in PDF points (fill-handle resize lower bound). */
+const COMMENT_MIN_W_PT = 80;
+const COMMENT_MIN_H_PT = 40;
+const COMMENT_FONT_MIN = 7;
+const COMMENT_FONT_MAX = 28;
+
+/** Back-fill defaults on an existing comment annotation (migration). */
+function migrateCommentAnnotation(ann) {
+  if (ann.type !== "comment") return;
+  if (!Array.isArray(ann.replies)) ann.replies = [];
+  if (typeof ann.fontSize !== "number") ann.fontSize = 11;
+  // Anchor was a single point (x, y) in older versions; give it a zero-size
+  // rectangle so new rect-based code paths still work.
+  if (typeof ann.w !== "number") ann.w = 0;
+  if (typeof ann.h !== "number") ann.h = 0;
+}
+
+/** Draw a single comment annotation: HTML box anchored to page-wrap + leader. */
+/** Set which comment is currently "active".
+ *
+ *  Active state is visualised in two places:
+ *   - The COMMENT BOX (in the gutter): .active class → thicker border +
+ *     shadow + its own fill-handle becomes visible (for box resize).
+ *   - The ANCHOR RECT (on the PDF body): .active class → cursor changes
+ *     to `move`, fill-opacity increases, and 8 resize handles are drawn
+ *     around it in the leader-svg. Dragging the anchor rect itself moves
+ *     the anchor; dragging the handles resizes it.
+ *
+ *  Uses plain class toggles + handle add/remove — no DOM re-render — so
+ *  focus / caret state in the comment body is preserved. */
+function setActiveCommentByKey(key) {
+  if (state.activeCommentKey === key) return;
+  // Clear any previously-rendered anchor chrome
+  document.querySelectorAll(".anchor-handle").forEach(el => el.remove());
+  state.activeCommentKey = key;
+  document.querySelectorAll(".comment-box").forEach(box => {
+    box.classList.toggle("active", box.dataset.commentKey === key);
+  });
+  document.querySelectorAll(".comment-anchor-rect, .comment-anchor-dot").forEach(el => {
+    el.classList.toggle("active", el.dataset.commentKey === key);
+  });
+  if (key) renderAnchorChrome(key);
+}
+
+/** Render 8 resize handles around the active comment's anchor rectangle. */
+function renderAnchorChrome(key) {
+  const [pageIdxStr, idxStr] = key.split(":");
+  const pageIdx = parseInt(pageIdxStr);
+  const idx = parseInt(idxStr);
+  if (isNaN(pageIdx) || isNaN(idx)) return;
+  const ann = state.annotations[pageIdx] && state.annotations[pageIdx][idx];
+  if (!ann || ann.type !== "comment") return;
+  const hasRect = (ann.w || 0) > 0 && (ann.h || 0) > 0;
+  if (!hasRect) return;  // point anchors can't be resized
+  const pageFrame = viewer.querySelector(`.page-frame[data-page-index="${pageIdx}"]`);
+  if (!pageFrame) return;
+  const leaderSvg = pageFrame.querySelector("svg.leader-svg");
+  if (!leaderSvg) return;
+
+  const hSize = 8;          // handle size in PDF points (≈ 11 CSS px at 1.4x)
+  const positions = anchorHandlePositions(ann);
+  for (const [dir, hx, hy] of positions) {
+    const h = document.createElementNS(SVG_NS, "rect");
+    h.classList.add("anchor-handle", dir);
+    h.dataset.commentKey = key;
+    h.dataset.dir = dir;
+    h.setAttribute("x", hx - hSize / 2);
+    h.setAttribute("y", hy - hSize / 2);
+    h.setAttribute("width", hSize);
+    h.setAttribute("height", hSize);
+    leaderSvg.appendChild(h);
+    attachAnchorResizeHandler(h, pageIdx, idx, dir);
+  }
+}
+
+/** Coordinates for the 8 resize handles around an anchor rect (PDF points). */
+function anchorHandlePositions(ann) {
+  const x = ann.x, y = ann.y, w = ann.w, h = ann.h;
+  return [
+    ["nw", x,         y        ],
+    ["n",  x + w / 2, y        ],
+    ["ne", x + w,     y        ],
+    ["e",  x + w,     y + h / 2],
+    ["se", x + w,     y + h    ],
+    ["s",  x + w / 2, y + h    ],
+    ["sw", x,         y + h    ],
+    ["w",  x,         y + h / 2],
+  ];
+}
+
+/** Move all handle rects currently attached to (pageIdx, idx)'s anchor. */
+function updateAnchorHandlePositions(leaderSvg, key, ann) {
+  const hSize = 8;
+  const posMap = Object.fromEntries(anchorHandlePositions(ann));
+  leaderSvg.querySelectorAll(`.anchor-handle[data-comment-key="${key}"]`).forEach(h => {
+    const dir = h.dataset.dir;
+    const pos = posMap[dir];
+    if (!pos) return;
+    h.setAttribute("x", pos[0] - hSize / 2);
+    h.setAttribute("y", pos[1] - hSize / 2);
+  });
+}
+
+/** Attach a resize pointerdown handler to one anchor-handle rect. */
+function attachAnchorResizeHandler(handleEl, pageIdx, idx, dir) {
+  handleEl.addEventListener("pointerdown", (downEvt) => {
+    if (downEvt.button !== 0 && downEvt.pointerType === "mouse") return;
+    downEvt.preventDefault();
+    downEvt.stopPropagation();
+    const ann = state.annotations[pageIdx] && state.annotations[pageIdx][idx];
+    if (!ann || ann.type !== "comment") return;
+    const pageFrame = viewer.querySelector(`.page-frame[data-page-index="${pageIdx}"]`);
+    if (!pageFrame) return;
+    const leaderSvg = pageFrame.querySelector("svg.leader-svg");
+    const pageWrap = pageFrame.querySelector(".page-wrap");
+    if (!leaderSvg || !pageWrap) return;
+    const pdfW = parseFloat(pageWrap.style.width) / VIEW_SCALE;
+    const pdfH = parseFloat(pageWrap.style.height) / VIEW_SCALE;
+    const key = `${pageIdx}:${idx}`;
+    const orig = { x: ann.x, y: ann.y, w: ann.w, h: ann.h };
+    const startX = downEvt.clientX;
+    const startY = downEvt.clientY;
+    const MIN = 5;
+
+    const onMove = (e) => {
+      const dx = (e.clientX - startX) / VIEW_SCALE;
+      const dy = (e.clientY - startY) / VIEW_SCALE;
+      let nx = orig.x, ny = orig.y, nw = orig.w, nh = orig.h;
+      if (dir.includes("w")) { nx = orig.x + dx; nw = orig.w - dx; }
+      if (dir.includes("e")) { nw = orig.w + dx; }
+      if (dir.includes("n")) { ny = orig.y + dy; nh = orig.h - dy; }
+      if (dir.includes("s")) { nh = orig.h + dy; }
+      if (nw < MIN) { if (dir.includes("w")) nx = orig.x + orig.w - MIN; nw = MIN; }
+      if (nh < MIN) { if (dir.includes("n")) ny = orig.y + orig.h - MIN; nh = MIN; }
+      // Clamp to page bounds
+      if (nx < 0) { nw += nx; nx = 0; }
+      if (ny < 0) { nh += ny; ny = 0; }
+      if (nx + nw > pdfW) nw = pdfW - nx;
+      if (ny + nh > pdfH) nh = pdfH - ny;
+      if (nw < MIN) nw = MIN;
+      if (nh < MIN) nh = MIN;
+      ann.x = nx; ann.y = ny; ann.w = nw; ann.h = nh;
+      // Update the anchor rect element
+      const anchorEl = leaderSvg.querySelector(
+        `.comment-anchor-rect[data-comment-key="${key}"]`);
+      if (anchorEl) {
+        anchorEl.setAttribute("x", ann.x);
+        anchorEl.setAttribute("y", ann.y);
+        anchorEl.setAttribute("width", ann.w);
+        anchorEl.setAttribute("height", ann.h);
+      }
+      // Update the leader line start point (rect right-middle)
+      const lineEl = leaderSvg.querySelector(`line[data-comment-key="${key}"]`);
+      if (lineEl) {
+        lineEl.setAttribute("x1", ann.x + ann.w);
+        lineEl.setAttribute("y1", ann.y + ann.h / 2);
+      }
+      updateAnchorHandlePositions(leaderSvg, key, ann);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+}
+
+function drawCommentAnnotation(ann, pageFrame, pageIdx, idx) {
+  migrateCommentAnnotation(ann);
+  const leaderSvg = pageFrame.querySelector("svg.leader-svg");
+  const pageWrap = pageFrame.querySelector(".page-wrap");
+  if (!leaderSvg || !pageWrap) return;
+  // Use the ACTUAL rendered page width (from pdf.js viewport) rather than
+  // pdf-lib's MediaBox width, so comment positioning always matches the
+  // visible page edge even if the PDF has a different CropBox.
+  const pdfW = parseFloat(pageWrap.style.width) / VIEW_SCALE;
+  const pdfH = parseFloat(pageWrap.style.height) / VIEW_SCALE;
+  const pageSize = state.pageSizes[pageIdx] || { width: pdfW, height: pdfH };
+
+  // ---- HTML comment box (positioned DIRECTLY in page-frame CSS space) ----
+  // ann.boxX is in PDF points relative to the page's top-left. When
+  // boxX > pdfW, the box sits in the gutter area (to the right of the page).
+  // Positioning directly against page-frame (whose width = page + gutter)
+  // avoids any intermediate layout container and guarantees the box lands
+  // at (boxX, boxY) regardless of CSS quirks.
+  const box = document.createElement("div");
+  box.className = "comment-box";
+  box.dataset.annotIndex = String(idx);
+  const commentKey = `${pageIdx}:${idx}`;
+  box.dataset.commentKey = commentKey;
+  if (state.activeCommentKey === commentKey) {
+    box.classList.add("active");
+  }
+  const applyGeom = () => {
+    box.style.left  = (ann.boxX * VIEW_SCALE) + "px";
+    box.style.top   = (ann.boxY * VIEW_SCALE) + "px";
+    box.style.width = (ann.boxW * VIEW_SCALE) + "px";
+    box.style.height= (ann.boxH * VIEW_SCALE) + "px";
+  };
+  applyGeom();
+  box.style.borderColor = ann.color;
+  box.style.fontSize = (ann.fontSize * VIEW_SCALE) + "px";
+
+  // ---- Header: title + A-/A+/返信/× ----
+  const header = document.createElement("div");
+  header.className = "cb-header";
+  const title = document.createElement("span");
+  title.className = "cb-title";
+  title.textContent = "コメント";
+  header.appendChild(title);
+
+  const tools = document.createElement("div");
+  tools.className = "cb-tools";
+  const btnFsDec = document.createElement("button");
+  btnFsDec.className = "cb-fs-dec";
+  btnFsDec.textContent = "A−";
+  btnFsDec.title = "文字を小さく";
+  const btnFsInc = document.createElement("button");
+  btnFsInc.className = "cb-fs-inc";
+  btnFsInc.textContent = "A+";
+  btnFsInc.title = "文字を大きく";
+  const btnReply = document.createElement("button");
+  btnReply.className = "cb-reply";
+  btnReply.textContent = "返信";
+  btnReply.title = "返信を追加";
+  const del = document.createElement("button");
+  del.className = "cb-del";
+  del.textContent = "×";
+  del.title = "コメントを削除";
+  tools.appendChild(btnFsDec);
+  tools.appendChild(btnFsInc);
+  tools.appendChild(btnReply);
+  tools.appendChild(del);
+  header.appendChild(tools);
+  box.appendChild(header);
+
+  // ---- Body (contenteditable main comment text) ----
+  // Replies are NOT nested here — they float as separate .reply-box elements
+  // in the gutter, rendered below after the parent box.
+  const body = document.createElement("div");
+  body.className = "cb-body";
+  body.setAttribute("contenteditable", "true");
+  body.setAttribute("spellcheck", "false");
+  body.textContent = ann.text || "";
+  box.appendChild(body);
+
+  // ---- Fill handle (bottom-right) ----
+  const fillHandle = document.createElement("div");
+  fillHandle.className = "cb-fill-handle";
+  fillHandle.title = "サイズ変更";
+  box.appendChild(fillHandle);
+
+  // Anchor the comment box INSIDE page-wrap so its position is relative to
+  // the page's actual rendered top-left (a known fixed-size element). This
+  // bypasses any page-frame / viewer centering or flex sizing quirks that
+  // could otherwise shift the comment.
+  pageWrap.appendChild(box);
+
+  // ---- Reply boxes: separate floating windows in the gutter area, NOT
+  // nested inside the parent comment. They auto-stack below the parent and
+  // follow the parent when it is dragged/resized. ----
+  const REPLY_GAP_PT = 5;
+  const REPLY_INDENT_PT = 12;
+  const REPLY_HEAD_H_PT = 14;   // fixed header strip (in PDF points)
+  const replyDoms = [];         // parallel array to ann.replies
+
+  /** Compute the height of a single reply in PDF points given its text. */
+  const computeReplyH = (text) => {
+    const replyW = Math.max(COMMENT_MIN_W_PT, ann.boxW - REPLY_INDENT_PT);
+    const lines = wrapTextToLines(text || " ", replyW - 12, ann.fontSize);
+    const bodyH = Math.max(ann.fontSize * 1.5, lines.length * ann.fontSize * 1.35 + 6);
+    return REPLY_HEAD_H_PT + bodyH;
+  };
+
+  /** Re-layout (position + size) all existing reply DOMs based on current ann state.
+      Reply boxes are positioned directly relative to page-frame in absolute
+      PDF-point coordinates (same space as ann.boxX / ann.boxY). */
+  const layoutReplies = () => {
+    const replyW = Math.max(COMMENT_MIN_W_PT, ann.boxW - REPLY_INDENT_PT);
+    const replyXPt = ann.boxX + REPLY_INDENT_PT;
+    let cursorYPt = ann.boxY + ann.boxH + REPLY_GAP_PT;
+    for (let i = 0; i < replyDoms.length; i++) {
+      const rb = replyDoms[i];
+      if (!rb) continue;
+      const text = ann.replies[i] || "";
+      const replyH = computeReplyH(text);
+      rb.style.left   = (replyXPt * VIEW_SCALE) + "px";
+      rb.style.top    = (cursorYPt * VIEW_SCALE) + "px";
+      rb.style.width  = (replyW * VIEW_SCALE) + "px";
+      rb.style.height = (replyH * VIEW_SCALE) + "px";
+      rb.style.fontSize = (ann.fontSize * VIEW_SCALE) + "px";
+      cursorYPt += replyH + REPLY_GAP_PT;
+    }
+  };
+
+  /** Build a DOM element for one reply. index is captured via dataset so that
+      handlers still work after splice. */
+  const buildReplyDom = () => {
+    const rb = document.createElement("div");
+    rb.className = "reply-box";
+    rb.dataset.annotIndex = String(idx);
+    rb.dataset.commentKey = commentKey;  // clicks on reply activate parent
+    rb.style.borderColor = ann.color;
+
+    const rHead = document.createElement("div");
+    rHead.className = "rb-header";
+    const rLabel = document.createElement("span");
+    rLabel.className = "rb-label";
+    rLabel.textContent = "";   // set during render based on live index
+    rHead.appendChild(rLabel);
+
+    const rDel = document.createElement("button");
+    rDel.className = "rb-del";
+    rDel.textContent = "×";
+    rDel.title = "返信を削除";
+    rDel.addEventListener("pointerdown", e => e.stopPropagation());
+    rDel.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const myIdx = parseInt(rb.dataset.replyIndex);
+      if (isNaN(myIdx)) return;
+      ann.replies.splice(myIdx, 1);
+      syncReplyDoms();
+    });
+    rHead.appendChild(rDel);
+    rb.appendChild(rHead);
+
+    const rBody = document.createElement("div");
+    rBody.className = "rb-body";
+    rBody.setAttribute("contenteditable", "true");
+    rBody.setAttribute("spellcheck", "false");
+    rBody.addEventListener("input", () => {
+      const myIdx = parseInt(rb.dataset.replyIndex);
+      if (isNaN(myIdx)) return;
+      ann.replies[myIdx] = rBody.innerText;
+      layoutReplies();  // text length change may grow/shrink the box
+    });
+    rBody.addEventListener("blur", () => {
+      const myIdx = parseInt(rb.dataset.replyIndex);
+      if (isNaN(myIdx)) return;
+      ann.replies[myIdx] = rBody.innerText;
+    });
+    rBody.addEventListener("pointerdown", e => e.stopPropagation());
+    rb.appendChild(rBody);
+
+    return rb;
+  };
+
+  /** Sync replyDoms[] to ann.replies[]: add/remove DOM elements as needed,
+      refresh labels + body text, then layout. */
+  const syncReplyDoms = () => {
+    while (replyDoms.length > ann.replies.length) {
+      const rb = replyDoms.pop();
+      if (rb) rb.remove();
+    }
+    while (replyDoms.length < ann.replies.length) {
+      const rb = buildReplyDom();
+      pageWrap.appendChild(rb);     // same parent as the comment box
+      replyDoms.push(rb);
+    }
+    for (let i = 0; i < replyDoms.length; i++) {
+      const rb = replyDoms[i];
+      rb.dataset.replyIndex = String(i);
+      const lbl = rb.querySelector(".rb-label");
+      if (lbl) lbl.textContent = `返信 ${i + 1}`;
+      const bodyEl = rb.querySelector(".rb-body");
+      // Only update DOM text when it actually differs, so the user's caret
+      // isn't reset while they're typing.
+      if (bodyEl && bodyEl.innerText !== (ann.replies[i] || "")) {
+        bodyEl.textContent = ann.replies[i] || "";
+      }
+    }
+    layoutReplies();
+  };
+
+  syncReplyDoms();
+
+  // ---- Leader line + anchor visual (rect or dot) in leader-svg ----
+  const line = document.createElementNS(SVG_NS, "line");
+  line.setAttribute("stroke", ann.color);
+  line.setAttribute("stroke-width", "1");
+  line.setAttribute("stroke-dasharray", "3 2");
+  line.setAttribute("vector-effect", "non-scaling-stroke");
+  line.dataset.annotIndex = String(idx);
+  line.dataset.commentKey = commentKey;
+  leaderSvg.appendChild(line);
+
+  // Create either a rectangle anchor (when the user dragged a range) or a
+  // point anchor (dot, when the user just clicked). The anchor is the
+  // ACTIVATION trigger: clicking it re-activates the comment for
+  // drag / resize.
+  const hasRectAnchor = (ann.w || 0) > 0 && (ann.h || 0) > 0;
+  let anchor;
+  if (hasRectAnchor) {
+    anchor = document.createElementNS(SVG_NS, "rect");
+    anchor.classList.add("comment-anchor-rect");
+    anchor.setAttribute("fill", ann.color);
+    anchor.setAttribute("fill-opacity", "0.15");
+    anchor.setAttribute("stroke", ann.color);
+    anchor.setAttribute("stroke-width", "1");
+    anchor.setAttribute("stroke-dasharray", "3 2");
+    anchor.setAttribute("vector-effect", "non-scaling-stroke");
+  } else {
+    anchor = document.createElementNS(SVG_NS, "circle");
+    anchor.setAttribute("r", "3.5");   // slightly larger for easier click
+    anchor.classList.add("comment-anchor-dot");
+    anchor.setAttribute("fill", ann.color);
+  }
+  anchor.dataset.annotIndex = String(idx);
+  anchor.dataset.commentKey = commentKey;
+  anchor.setAttribute("pointer-events", "all");
+  leaderSvg.appendChild(anchor);
+
+  updateLeaderLine(ann, line, anchor);
+
+  // ---- Drag-to-move the anchor on the page (only when this comment is
+  // ACTIVE). Dragging updates ann.x / ann.y and the leader line follows. ----
+  anchor.addEventListener("pointerdown", (downEvt) => {
+    if (state.activeCommentKey !== commentKey) return;
+    if (downEvt.button !== 0 && downEvt.pointerType === "mouse") return;
+    downEvt.preventDefault();
+    downEvt.stopPropagation();
+    const origX = ann.x, origY = ann.y;
+    const startClientX = downEvt.clientX;
+    const startClientY = downEvt.clientY;
+    const onMove = (e) => {
+      const dx = (e.clientX - startClientX) / VIEW_SCALE;
+      const dy = (e.clientY - startClientY) / VIEW_SCALE;
+      const w = ann.w || 0;
+      const h = ann.h || 0;
+      let nx = origX + dx;
+      let ny = origY + dy;
+      // Clamp to page bounds
+      if (nx < 0) nx = 0;
+      if (ny < 0) ny = 0;
+      if (nx + w > pdfW) nx = pdfW - w;
+      if (ny + h > pdfH) ny = pdfH - h;
+      ann.x = nx;
+      ann.y = ny;
+      updateLeaderLine(ann, line, anchor);
+      // Move the handles along with the anchor
+      updateAnchorHandlePositions(leaderSvg, commentKey, ann);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+
+  // ---- Drag to move (header = drag handle, excluding the tool buttons) ----
+  header.addEventListener("pointerdown", (downEvt) => {
+    if (downEvt.target.closest(".cb-tools")) return;
+    if (downEvt.button !== 0 && downEvt.pointerType === "mouse") return;
+    // Only allow drag-to-move when this comment is ACTIVE.
+    // A click on an inactive comment just activates it (handled by the
+    // document pointerdown listener) without starting a drag.
+    if (!box.classList.contains("active")) return;
+    downEvt.preventDefault();
+    downEvt.stopPropagation();
+    const startX = downEvt.clientX;
+    const startY = downEvt.clientY;
+    const origBoxX = ann.boxX;
+    const origBoxY = ann.boxY;
+    const onMove = (e) => {
+      const dxCss = e.clientX - startX;
+      const dyCss = e.clientY - startY;
+      ann.boxX = origBoxX + dxCss / VIEW_SCALE;
+      ann.boxY = origBoxY + dyCss / VIEW_SCALE;
+      const maxY = pageSize.height - ann.boxH;
+      if (ann.boxY < 0) ann.boxY = 0;
+      if (ann.boxY > maxY) ann.boxY = maxY;
+      const minX = pdfW - 20;
+      const maxX = pdfW + GUTTER_PT - 10;
+      if (ann.boxX < minX) ann.boxX = minX;
+      if (ann.boxX > maxX) ann.boxX = maxX;
+      applyGeom();
+      updateLeaderLine(ann, line, anchor);
+      layoutReplies();
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+
+  // ---- Fill handle resize (drag to change boxW / boxH) ----
+  fillHandle.addEventListener("pointerdown", (downEvt) => {
+    if (downEvt.button !== 0 && downEvt.pointerType === "mouse") return;
+    downEvt.preventDefault();
+    downEvt.stopPropagation();
+    const startX = downEvt.clientX;
+    const startY = downEvt.clientY;
+    const origW = ann.boxW;
+    const origH = ann.boxH;
+    const maxWAbs = (pdfW + GUTTER_PT) - ann.boxX - 2;  // keep inside gutter
+    const maxHAbs = pageSize.height - ann.boxY - 2;
+    const onMove = (e) => {
+      const dxCss = e.clientX - startX;
+      const dyCss = e.clientY - startY;
+      let nw = origW + dxCss / VIEW_SCALE;
+      let nh = origH + dyCss / VIEW_SCALE;
+      if (nw < COMMENT_MIN_W_PT) nw = COMMENT_MIN_W_PT;
+      if (nh < COMMENT_MIN_H_PT) nh = COMMENT_MIN_H_PT;
+      if (nw > maxWAbs) nw = maxWAbs;
+      if (nh > maxHAbs) nh = maxHAbs;
+      ann.boxW = nw;
+      ann.boxH = nh;
+      applyGeom();
+      updateLeaderLine(ann, line, anchor);
+      layoutReplies();
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+
+  // ---- Font size A- / A+ ----
+  const applyFs = () => {
+    if (ann.fontSize < COMMENT_FONT_MIN) ann.fontSize = COMMENT_FONT_MIN;
+    if (ann.fontSize > COMMENT_FONT_MAX) ann.fontSize = COMMENT_FONT_MAX;
+    box.style.fontSize = (ann.fontSize * VIEW_SCALE) + "px";
+    // Reply boxes inherit the parent fontSize; also relayout because their
+    // line-wrap heights depend on fontSize.
+    layoutReplies();
+  };
+  btnFsDec.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ann.fontSize = (ann.fontSize || 11) - 1;
+    applyFs();
+  });
+  btnFsInc.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ann.fontSize = (ann.fontSize || 11) + 1;
+    applyFs();
+  });
+  // Block drag initiation on the tool buttons.
+  [btnFsDec, btnFsInc, btnReply, del].forEach(b => {
+    b.addEventListener("pointerdown", e => e.stopPropagation());
+  });
+
+  // ---- Reply: append empty reply sub-window and focus it ----
+  btnReply.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ann.replies.push("");
+    syncReplyDoms();
+    const last = replyDoms[replyDoms.length - 1];
+    if (last) {
+      const bodyEl = last.querySelector(".rb-body");
+      if (bodyEl) bodyEl.focus();
+    }
+  });
+
+  // ---- Delete comment ----
+  del.addEventListener("click", (e) => {
+    e.stopPropagation();
+    deleteAnnotationAt(pageIdx, idx);
+  });
+
+  // ---- Body edit: update model on input ----
+  body.addEventListener("input", () => { ann.text = body.innerText; });
+  body.addEventListener("blur",  () => { ann.text = body.innerText; });
+}
+
+/** Update the leader line + anchor SVG primitives to match ann coords.
+ *  The anchor may be either a <rect> (range-selected) or <circle> (point). */
+function updateLeaderLine(ann, line, anchor) {
+  // Leader line ends at the left-middle of the comment box.
+  const endX = ann.boxX;
+  const endY = ann.boxY + ann.boxH / 2;
+  // Leader line starts at the RIGHT edge of the anchor (so the line reaches
+  // the comment box in the right-side gutter without crossing the anchor).
+  const hasRect = (ann.w || 0) > 0 && (ann.h || 0) > 0;
+  const startX = hasRect ? ann.x + ann.w : ann.x;
+  const startY = hasRect ? ann.y + ann.h / 2 : ann.y;
+  line.setAttribute("x1", startX);
+  line.setAttribute("y1", startY);
+  line.setAttribute("x2", endX);
+  line.setAttribute("y2", endY);
+  if (!anchor) return;
+  if (anchor.tagName.toLowerCase() === "rect") {
+    anchor.setAttribute("x", ann.x);
+    anchor.setAttribute("y", ann.y);
+    anchor.setAttribute("width", ann.w);
+    anchor.setAttribute("height", ann.h);
+  } else {
+    anchor.setAttribute("cx", ann.x);
+    anchor.setAttribute("cy", ann.y);
+  }
+}
+
+function drawAnnotationsForPage(pageIdx) {
+  const wrap = viewer.querySelector(`.page-wrap[data-page-index="${pageIdx}"]`);
+  if (!wrap) return;
+  const pageFrame = wrap.closest(".page-frame");
+  const svg = wrap.querySelector("svg.overlay");
+  // Remove only .annot elements here; selection chrome is managed separately
+  // by updateSelectionChrome() so that click/dblclick events on annotations
+  // are not disrupted by DOM recreation when selection state changes.
+  Array.from(svg.querySelectorAll(".annot")).forEach(el => el.remove());
+  // Clear comment / reply DOM + leader lines for this page (rebuilt below).
+  // Comment and reply boxes are now direct children of .page-wrap.
+  Array.from(wrap.querySelectorAll(".comment-box, .reply-box"))
+    .forEach(el => el.remove());
+  if (pageFrame) {
+    const gutter = pageFrame.querySelector(".comment-gutter");
+    if (gutter) gutter.innerHTML = "";
+    const leaderSvg = pageFrame.querySelector("svg.leader-svg");
+    if (leaderSvg) leaderSvg.innerHTML = "";
+  }
+
+  const list = state.annotations[pageIdx] || [];
+  list.forEach((ann, idx) => {
+    if (ann.type === "comment") {
+      if (pageFrame) drawCommentAnnotation(ann, pageFrame, pageIdx, idx);
+      return;
+    }
+    let el;
+    if (ann.type === "highlight") {
+      el = document.createElementNS(SVG_NS, "rect");
+      el.setAttribute("x", ann.x);
+      el.setAttribute("y", ann.y);
+      el.setAttribute("width", ann.w);
+      el.setAttribute("height", ann.h);
+      el.setAttribute("fill", ann.color);
+      el.setAttribute("fill-opacity", String(ann.opacity ?? 0.4));
+      // Make the entire rect clickable (explicit for robustness across browsers).
+      el.setAttribute("pointer-events", "all");
+    } else if (ann.type === "frame") {
+      // Use a <g> so the hit area covers the entire interior of the frame,
+      // not just the thin stroked border. The invisible backing rect catches
+      // clicks, the visible outlined rect shows the border.
+      el = document.createElementNS(SVG_NS, "g");
+      const hit = document.createElementNS(SVG_NS, "rect");
+      hit.setAttribute("x", ann.x);
+      hit.setAttribute("y", ann.y);
+      hit.setAttribute("width", ann.w);
+      hit.setAttribute("height", ann.h);
+      hit.setAttribute("fill", "rgba(255,255,255,0.001)");  // near-transparent but "painted"
+      hit.setAttribute("pointer-events", "all");
+      el.appendChild(hit);
+      const outline = document.createElementNS(SVG_NS, "rect");
+      outline.setAttribute("x", ann.x);
+      outline.setAttribute("y", ann.y);
+      outline.setAttribute("width", ann.w);
+      outline.setAttribute("height", ann.h);
+      outline.setAttribute("fill", "none");
+      outline.setAttribute("stroke", ann.color);
+      outline.setAttribute("stroke-width", ann.strokeWidth);
+      outline.setAttribute("stroke-opacity", String(ann.opacity ?? 1));
+      outline.setAttribute("vector-effect", "non-scaling-stroke");
+      outline.setAttribute("pointer-events", "none");  // events fall through to the hit rect
+      el.appendChild(outline);
+    } else if (ann.type === "strikethrough") {
+      el = document.createElementNS(SVG_NS, "g");
+      el.appendChild(document.createElementNS(SVG_NS, "line"));
+      el.appendChild(document.createElementNS(SVG_NS, "line"));
+      updateStrikethroughEl(el, ann);
+    } else if (ann.type === "pen") {
+      el = document.createElementNS(SVG_NS, "polyline");
+      el.setAttribute("points", ann.points.map(p => p.join(",")).join(" "));
+      el.setAttribute("fill", "none");
+      el.setAttribute("stroke", ann.color);
+      el.setAttribute("stroke-width", ann.width);
+      el.setAttribute("stroke-opacity", String(ann.opacity ?? 1));
+      el.setAttribute("stroke-linecap", "round");
+      el.setAttribute("stroke-linejoin", "round");
+    } else if (ann.type === "text") {
+      migrateTextAnnotation(ann);
+      const widthPt = ann.w ?? TEXT_DEFAULT_WIDTH_PT;
+      const lines = wrapTextToLines(ann.text, widthPt, ann.fontSize);
+      const boxH = Math.max(
+        ann.fontSize * TEXT_LINE_HEIGHT,
+        lines.length * ann.fontSize * TEXT_LINE_HEIGHT
+      );
+
+      // Group so a transparent backing rect can capture clicks across the
+      // entire text box (SVG <text> only receives clicks on actual glyphs).
+      el = document.createElementNS(SVG_NS, "g");
+
+      const bg = document.createElementNS(SVG_NS, "rect");
+      bg.setAttribute("x", ann.x);
+      bg.setAttribute("y", ann.y);
+      bg.setAttribute("width", widthPt);
+      bg.setAttribute("height", boxH);
+      bg.setAttribute("fill", "transparent");
+      bg.setAttribute("pointer-events", "all");
+      el.appendChild(bg);
+
+      const textEl = document.createElementNS(SVG_NS, "text");
+      textEl.setAttribute("x", ann.x);
+      textEl.setAttribute("y", ann.y + ann.fontSize);
+      textEl.setAttribute("fill", ann.color);
+      textEl.setAttribute("fill-opacity", String(ann.opacity ?? 1));
+      textEl.setAttribute("font-size", ann.fontSize);
+      textEl.setAttribute("font-family", TEXT_FONT_STACK);
+      textEl.setAttribute("pointer-events", "none");
+      lines.forEach((line, i) => {
+        const tspan = document.createElementNS(SVG_NS, "tspan");
+        tspan.setAttribute("x", ann.x);
+        if (i > 0) tspan.setAttribute("dy", ann.fontSize * TEXT_LINE_HEIGHT);
+        // Non-breaking space keeps empty lines visible/selectable.
+        tspan.textContent = line.length ? line : "\u00A0";
+        textEl.appendChild(tspan);
+      });
+      el.appendChild(textEl);
+    }
+    if (!el) return;
+    el.classList.add("annot");
+    el.dataset.annotIndex = String(idx);
+
+    el.addEventListener("click", (e) => {
+      if (state.currentTool === "eraser") {
+        e.stopPropagation();
+        deleteAnnotationAt(pageIdx, idx);
+        return;
+      }
+      if (state.currentTool === "select") {
+        e.stopPropagation();
+        selectAnnotation(pageIdx, idx);
+      }
+    });
+
+    // (Double-click to re-edit text is handled by a delegated listener on
+    // the SVG element itself — see updateSelectionChrome's caller in
+    // drawAnnotationsForPage. Delegation survives .annot DOM recreation.)
+
+    svg.appendChild(el);
+  });
+
+  // NOTE: empty-area deselect is handled in svg.pointerdown below, NOT here.
+  // We intentionally do not hook onclick: after a drag-to-create, the click
+  // event fires on the svg background (the temporary drawing element was
+  // removed in finishDraw), which would spuriously deselect the just-created
+  // shape. pointerdown only fires on explicit user presses, so it's a
+  // reliable signal for "user clicked away to deselect".
+  svg.onclick = null;
+
+  // Render chrome (selection frame + handles) for the currently selected item.
+  updateSelectionChrome(pageIdx);
+}
+
+/**
+ * Update only the selection chrome (dashed frame, move overlay, handles)
+ * on a given page. Does NOT touch .annot elements — this is important so
+ * that clicking on an annotation to select it does not destroy the DOM node
+ * that will receive the subsequent click (which would otherwise break
+ * browser double-click detection).
+ */
+function updateSelectionChrome(pageIdx) {
+  const wrap = viewer.querySelector(`.page-wrap[data-page-index="${pageIdx}"]`);
+  if (!wrap) return;
+  const svg = wrap.querySelector("svg.overlay");
+  if (!svg) return;
+  svg.querySelectorAll(".sel-bg, .sel-move, .sel-handle").forEach(el => el.remove());
+  if (state.selected && state.selected.pageIdx === pageIdx) {
+    renderSelectionChrome(svg, pageIdx, state.selected.index);
+  }
+}
+
+// ----- Selection chrome (bounding box + resize handles) ---------------------
+function annotationBoundingBox(ann, svg, idx) {
+  if (ann.type === "highlight" || ann.type === "frame") {
+    return { x: ann.x, y: ann.y, w: ann.w, h: ann.h };
+  }
+  if (ann.type === "strikethrough") {
+    const pad = (ann.strokeWidth || 1) + (ann.gap ?? 2.5) / 2 + 2;
+    return {
+      x: Math.min(ann.x1, ann.x2) - pad,
+      y: Math.min(ann.y1, ann.y2) - pad,
+      w: Math.abs(ann.x2 - ann.x1) + pad * 2,
+      h: Math.abs(ann.y2 - ann.y1) + pad * 2,
+    };
+  }
+  if (ann.type === "text") {
+    const widthPt = ann.w ?? TEXT_DEFAULT_WIDTH_PT;
+    const lines = wrapTextToLines(ann.text, widthPt, ann.fontSize);
+    return {
+      x: ann.x,
+      y: ann.y,
+      w: widthPt,
+      h: Math.max(ann.fontSize * TEXT_LINE_HEIGHT, lines.length * ann.fontSize * TEXT_LINE_HEIGHT),
+    };
+  }
+  if (ann.type === "pen") {
+    // Use the rendered SVG element's measured bbox.
+    const el = svg.querySelector(`.annot[data-annot-index="${idx}"]`);
+    if (!el) return null;
+    try {
+      const b = el.getBBox();
+      return { x: b.x, y: b.y, w: b.width, h: b.height };
+    } catch (_) { return null; }
+  }
+  return null;
+}
+
+function renderSelectionChrome(svg, pageIdx, idx) {
+  const ann = state.annotations[pageIdx][idx];
+  if (!ann) return;
+  const bb = annotationBoundingBox(ann, svg, idx);
+  if (!bb) return;
+  const pad = 2;
+  const x = bb.x - pad, y = bb.y - pad, w = bb.w + pad * 2, h = bb.h + pad * 2;
+
+  // Dashed selection background (visual border).
+  const bg = document.createElementNS(SVG_NS, "rect");
+  bg.setAttribute("x", x);
+  bg.setAttribute("y", y);
+  bg.setAttribute("width", w);
+  bg.setAttribute("height", h);
+  bg.classList.add("sel-bg");
+  svg.appendChild(bg);
+
+  // Transparent overlay used to grab-and-move the annotation.
+  const move = document.createElementNS(SVG_NS, "rect");
+  move.setAttribute("x", x);
+  move.setAttribute("y", y);
+  move.setAttribute("width", w);
+  move.setAttribute("height", h);
+  move.classList.add("sel-move");
+  svg.appendChild(move);
+  attachMoveHandler(move, svg, pageIdx, idx);
+
+  // Resize handles.
+  //   - highlight / frame: full 8 handles (N/E/S/W + 4 corners)
+  //   - text: 6 handles (4 corners + E/W) — corner/side handles all resize
+  //           the *width* only, since text height auto-follows wrapped content
+  let positions = null;
+  if (ann.type === "highlight" || ann.type === "frame") {
+    positions = [
+      ["nw", x,         y],
+      ["n",  x + w / 2, y],
+      ["ne", x + w,     y],
+      ["e",  x + w,     y + h / 2],
+      ["se", x + w,     y + h],
+      ["s",  x + w / 2, y + h],
+      ["sw", x,         y + h],
+      ["w",  x,         y + h / 2],
+    ];
+  } else if (ann.type === "text") {
+    positions = [
+      ["nw", x,         y],
+      ["ne", x + w,     y],
+      ["e",  x + w,     y + h / 2],
+      ["se", x + w,     y + h],
+      ["sw", x,         y + h],
+      ["w",  x,         y + h / 2],
+    ];
+  }
+  if (positions) {
+    const handleSize = 9 / VIEW_SCALE;
+    positions.forEach(([dir, hx, hy]) => {
+      const r = document.createElementNS(SVG_NS, "rect");
+      r.setAttribute("x", hx - handleSize / 2);
+      r.setAttribute("y", hy - handleSize / 2);
+      r.setAttribute("width", handleSize);
+      r.setAttribute("height", handleSize);
+      r.setAttribute("data-handle", dir);
+      r.classList.add("sel-handle", dir);
+      svg.appendChild(r);
+      attachResizeHandler(r, svg, pageIdx, idx, dir);
+    });
+  }
+}
+
+// ----- Move handler ---------------------------------------------------------
+function attachMoveHandler(targetEl, svg, pageIdx, idx) {
+  targetEl.addEventListener("pointerdown", (downEvt) => {
+    if (downEvt.button !== 0 && downEvt.pointerType === "mouse") return;
+
+    // Check for our own double-click detection. The first press usually
+    // lands on the .annot (handled in svg.pointerdown); the second press
+    // ends up here because .sel-move is now overlaid on top.
+    const now = Date.now();
+    const isDouble =
+      (now - lastPointerDownInfo.time) < DOUBLE_CLICK_MS &&
+      lastPointerDownInfo.pageIdx === pageIdx &&
+      lastPointerDownInfo.idx === idx;
+    lastPointerDownInfo = { time: now, pageIdx, idx };
+
+    if (isDouble) {
+      const annCheck = state.annotations[pageIdx][idx];
+      if (annCheck && annCheck.type === "text") {
+        downEvt.preventDefault();
+        downEvt.stopPropagation();
+        lastPointerDownInfo.time = 0;
+        editTextAnnotation(pageIdx, idx);
+        return;
+      }
+    }
+
+    downEvt.preventDefault();
+    downEvt.stopPropagation();
+    const ann = state.annotations[pageIdx][idx];
+    const startPdf = pointToPdf(svg, downEvt);
+    const orig = JSON.parse(JSON.stringify(ann));
+
+    const onMove = (e) => {
+      const cur = pointToPdf(svg, e);
+      const dx = cur.x - startPdf.x;
+      const dy = cur.y - startPdf.y;
+      if (ann.type === "pen") {
+        ann.points = orig.points.map(([px, py]) => [px + dx, py + dy]);
+      } else if (ann.type === "strikethrough") {
+        ann.x1 = orig.x1 + dx;
+        ann.y1 = orig.y1 + dy;
+        ann.x2 = orig.x2 + dx;
+        ann.y2 = orig.y2 + dy;
+      } else {
+        ann.x = orig.x + dx;
+        ann.y = orig.y + dy;
+      }
+      drawAnnotationsForPage(pageIdx);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      updatePropertyPanel();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+}
+
+// ----- Resize handler -------------------------------------------------------
+function attachResizeHandler(handleEl, svg, pageIdx, idx, dir) {
+  handleEl.addEventListener("pointerdown", (downEvt) => {
+    if (downEvt.button !== 0 && downEvt.pointerType === "mouse") return;
+    downEvt.preventDefault();
+    downEvt.stopPropagation();
+    const ann = state.annotations[pageIdx][idx];
+    if (ann.type !== "highlight" && ann.type !== "frame" && ann.type !== "text") return;
+    const startPdf = pointToPdf(svg, downEvt);
+    const orig = { x: ann.x, y: ann.y, w: ann.w, h: ann.h };
+    const MIN = 5;
+
+    const onMove = (e) => {
+      const cur = pointToPdf(svg, e);
+      const dx = cur.x - startPdf.x;
+      const dy = cur.y - startPdf.y;
+      if (ann.type === "text") {
+        // Text only resizes width — height follows the wrapped content.
+        let nx = orig.x, nw = orig.w;
+        if (dir.includes("w")) { nx = orig.x + dx; nw = orig.w - dx; }
+        if (dir.includes("e")) { nw = orig.w + dx; }
+        if (nw < MIN) {
+          if (dir.includes("w")) nx = orig.x + orig.w - MIN;
+          nw = MIN;
+        }
+        ann.x = nx;
+        ann.w = nw;
+        drawAnnotationsForPage(pageIdx);
+        return;
+      }
+      let nx = orig.x, ny = orig.y, nw = orig.w, nh = orig.h;
+      if (dir.includes("w")) { nx = orig.x + dx; nw = orig.w - dx; }
+      if (dir.includes("e")) { nw = orig.w + dx; }
+      if (dir.includes("n")) { ny = orig.y + dy; nh = orig.h - dy; }
+      if (dir.includes("s")) { nh = orig.h + dy; }
+      if (nw < MIN) {
+        if (dir.includes("w")) nx = orig.x + orig.w - MIN;
+        nw = MIN;
+      }
+      if (nh < MIN) {
+        if (dir.includes("n")) ny = orig.y + orig.h - MIN;
+        nh = MIN;
+      }
+      ann.x = nx; ann.y = ny; ann.w = nw; ann.h = nh;
+      drawAnnotationsForPage(pageIdx);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      updatePropertyPanel();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+}
+
+// ----- Selection state + property panel -------------------------------------
+function selectAnnotation(pageIdx, idx) {
+  const prev = state.selected;
+  state.selected = { pageIdx, index: idx };
+  // Only update selection chrome, never touch .annot DOM — preserves
+  // double-click detection and click listeners on annotation elements.
+  if (prev && prev.pageIdx !== pageIdx) updateSelectionChrome(prev.pageIdx);
+  updateSelectionChrome(pageIdx);
+  showPropertyPanel();
+}
+
+function deselectAnnotation() {
+  if (!state.selected) return;
+  const { pageIdx } = state.selected;
+  state.selected = null;
+  updateSelectionChrome(pageIdx);
+  hidePropertyPanel();
+}
+
+function deleteAnnotationAt(pageIdx, idx) {
+  state.annotations[pageIdx].splice(idx, 1);
+  if (state.selected && state.selected.pageIdx === pageIdx) {
+    if (state.selected.index === idx) {
+      state.selected = null;
+      hidePropertyPanel();
+    } else if (state.selected.index > idx) {
+      state.selected.index -= 1;
+    }
+  }
+  drawAnnotationsForPage(pageIdx);
+  toast("注釈を削除");
+}
+
+function editTextAnnotation(pageIdx, idx) {
+  const ann = state.annotations[pageIdx][idx];
+  migrateTextAnnotation(ann);
+  const wrap = viewer.querySelector(`.page-wrap[data-page-index="${pageIdx}"]`);
+  if (!wrap) return;
+  openTextEditor(wrap, pageIdx, {
+    xPdf: ann.x,
+    yPdf: ann.y,
+    widthPdf: ann.w ?? TEXT_DEFAULT_WIDTH_PT,
+    fontSizePdf: ann.fontSize,
+    color: ann.color,
+    initialText: ann.text,
+    editIdx: idx,
+  });
+}
+
+const propPanel = () => document.getElementById("prop-panel");
+
+function showPropertyPanel() {
+  propPanel().classList.add("show");
+  updatePropertyPanel();
+}
+function hidePropertyPanel() {
+  propPanel().classList.remove("show");
+}
+
+function updatePropertyPanel() {
+  if (!state.selected) { hidePropertyPanel(); return; }
+  const { pageIdx, index } = state.selected;
+  const ann = state.annotations[pageIdx][index];
+  if (!ann) { hidePropertyPanel(); return; }
+
+  const titles = {
+    text: "テキスト", highlight: "ハイライト",
+    frame: "枠線", pen: "ペン", strikethrough: "取り消し線",
+  };
+  document.getElementById("prop-title").textContent = titles[ann.type] || "注釈";
+
+  document.getElementById("prop-color").value = ann.color || "#000000";
+
+  // Show/hide rows depending on annotation type.
+  const fontRow = document.getElementById("row-fontsize");
+  const strokeRow = document.getElementById("row-stroke");
+  const wRow = document.getElementById("row-w");
+  const hRow = document.getElementById("row-h");
+
+  fontRow.style.display = ann.type === "text" ? "flex" : "none";
+  strokeRow.style.display =
+    (ann.type === "frame" || ann.type === "pen" || ann.type === "strikethrough")
+      ? "flex" : "none";
+  wRow.style.display =
+    (ann.type === "highlight" || ann.type === "frame" || ann.type === "text")
+      ? "flex" : "none";
+  hRow.style.display = (ann.type === "highlight" || ann.type === "frame") ? "flex" : "none";
+
+  if (ann.type === "text") {
+    document.getElementById("prop-fontsize").value = Math.round(ann.fontSize * VIEW_SCALE);
+    document.getElementById("prop-w").value = Math.round(ann.w ?? TEXT_DEFAULT_WIDTH_PT);
+  }
+  if (ann.type === "frame") {
+    document.getElementById("prop-stroke").value = +(ann.strokeWidth).toFixed(1);
+  }
+  if (ann.type === "pen") {
+    document.getElementById("prop-stroke").value = +(ann.width).toFixed(1);
+  }
+  if (ann.type === "strikethrough") {
+    document.getElementById("prop-stroke").value = +(ann.strokeWidth).toFixed(1);
+  }
+  if (ann.type === "highlight" || ann.type === "frame") {
+    document.getElementById("prop-w").value = Math.round(ann.w);
+    document.getElementById("prop-h").value = Math.round(ann.h);
+  }
+
+  const opPct = Math.round((ann.opacity ?? 1) * 100);
+  document.getElementById("prop-opacity").value = opPct;
+  document.getElementById("prop-opacity-val").textContent = opPct;
+}
+
+function applyPropertyPanelEdit(field, value) {
+  if (!state.selected) return;
+  const { pageIdx, index } = state.selected;
+  const ann = state.annotations[pageIdx][index];
+  if (!ann) return;
+  switch (field) {
+    case "color":    ann.color = value; break;
+    case "fontSize": ann.fontSize = parseFloat(value) / VIEW_SCALE; break;
+    case "stroke":
+      if (ann.type === "frame") ann.strokeWidth = parseFloat(value);
+      else if (ann.type === "pen") ann.width = parseFloat(value);
+      else if (ann.type === "strikethrough") ann.strokeWidth = parseFloat(value);
+      break;
+    case "w":       ann.w = Math.max(2, parseFloat(value)); break;
+    case "h":       ann.h = Math.max(2, parseFloat(value)); break;
+    case "opacity":
+      ann.opacity = Math.max(0, Math.min(1, parseFloat(value) / 100));
+      document.getElementById("prop-opacity-val").textContent = Math.round(ann.opacity * 100);
+      break;
+  }
+  drawAnnotationsForPage(pageIdx);
+}
+
+// ----- Color helpers --------------------------------------------------------
+function hexToRgb(hex) {
+  const m = hex.replace("#", "").match(/.{2}/g);
+  if (!m) return rgb(0, 0, 0);
+  return rgb(parseInt(m[0], 16) / 255, parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255);
+}
+
+// ============================================================================
+// Page numbers (modifies pdfDoc directly; not stored as annotations)
+// ============================================================================
+async function addPageNumbers({ position, format, fontSize, startNumber, skipPages }) {
+  // Try Japanese font first so書式に「第{page}ページ」など日本語を入れても出力できる。
+  // フォント取得失敗時は Helvetica にフォールバック（数字書式なら問題なし）。
+  let font;
+  try {
+    font = await embedJpFont(state.pdfDoc);
+  } catch (err) {
+    console.warn("日本語フォント取得失敗、Helveticaを使用:", err);
+    toast("日本語フォント取得失敗 — Helveticaを使用", 3500);
+    font = await state.pdfDoc.embedFont(StandardFonts.Helvetica);
+  }
+  const total = state.pdfDoc.getPageCount();
+  const skip = new Set(skipPages);
+  const pages = state.pdfDoc.getPages();
+  let counter = startNumber;
+  pages.forEach((page, idx) => {
+    const pageNum = idx + 1;
+    if (skip.has(pageNum)) return;
+    const text = format.replace(/\{page\}/g, String(counter)).replace(/\{total\}/g, String(total));
+    const { width, height } = page.getSize();
+    const tw = font.widthOfTextAtSize(text, fontSize);
+    const margin = 24;
+    const y = position.startsWith("top") ? height - margin : margin;
+    let x;
+    if (position.endsWith("left")) x = margin;
+    else if (position.endsWith("right")) x = width - margin - tw;
+    else x = (width - tw) / 2;
+    page.drawText(text, { x, y, size: fontSize, font, color: rgb(0, 0, 0) });
+    counter++;
+  });
+  await persist();
+  toast("ページ番号を追加");
+}
+
+// ============================================================================
+// Save: bake all annotations into the PDF and trigger download
+// ============================================================================
+async function burnAnnotationsIntoPdf(doc) {
+  // Try to embed a Japanese-capable font. If that fails (CDN down, offline,
+  // CORS blocked, etc.) we fall back to Helvetica — but Helvetica only
+  // supports Latin-1, so any annotation that contains non-Latin chars will
+  // be SKIPPED (with a console warning) instead of crashing the export.
+  let font;
+  let fontIsJp = false;
+  try {
+    font = await embedJpFont(doc);
+    fontIsJp = true;
+  } catch (err) {
+    console.warn("日本語フォント読み込み失敗、Helveticaにフォールバック:", err);
+    toast("日本語フォント読込失敗 — 英数字のみ保存", 4000);
+    font = await doc.embedFont(StandardFonts.Helvetica);
+  }
+  // Helvetica only encodes Latin-1; helper to detect un-encodable chars.
+  const isLatin1 = (s) => /^[\x00-\xFF]*$/.test(s);
+
+  const pages = doc.getPages();
+  let skipped = 0;
+  pages.forEach((page, idx) => {
+    const list = state.annotations[idx] || [];
+
+    // -------------------------------------------------------------------
+    // Pre-pass: if any comment (or its replies) extends beyond the current
+    // page width, EXTEND the page's MediaBox to the right so the comments
+    // appear in the exported PDF exactly where they were in the editor
+    // (outside the original content area). Height is never changed.
+    // -------------------------------------------------------------------
+    {
+      const origSize = page.getSize();
+      let needW = origSize.width;
+      const REPLY_INDENT_PT = 12;
+      for (const ann of list) {
+        if (ann.type !== "comment") continue;
+        migrateCommentAnnotation(ann);
+        const parentR = ann.boxX + ann.boxW;
+        if (parentR > needW) needW = parentR;
+        const replyW = Math.max(COMMENT_MIN_W_PT, ann.boxW - REPLY_INDENT_PT);
+        const replyR = ann.boxX + REPLY_INDENT_PT + replyW;
+        if (replyR > needW) needW = replyR;
+      }
+      if (needW > origSize.width) {
+        // Extra 10pt right margin so the rightmost comment has breathing room
+        page.setSize(needW + 10, origSize.height);
+      }
+    }
+    // Get the (possibly-updated) page size for the draw pass.
+    const { height: pageH } = page.getSize();
+    const pageW_draw = page.getSize().width;
+    list.forEach(ann => {
+      const color = hexToRgb(ann.color);
+      const opacity = ann.opacity ?? 1;
+      if (ann.type === "highlight") {
+        page.drawRectangle({
+          x: ann.x,
+          y: pageH - ann.y - ann.h,
+          width: ann.w,
+          height: ann.h,
+          color,
+          opacity: ann.opacity ?? 0.4,
+        });
+      } else if (ann.type === "frame") {
+        page.drawRectangle({
+          x: ann.x,
+          y: pageH - ann.y - ann.h,
+          width: ann.w,
+          height: ann.h,
+          borderColor: color,
+          borderWidth: ann.strokeWidth,
+          borderOpacity: opacity,
+          // no fill
+        });
+      } else if (ann.type === "pen") {
+        // Draw consecutive line segments. pdf-lib's drawLine uses bottom-left origin.
+        for (let i = 1; i < ann.points.length; i++) {
+          const [x1, y1] = ann.points[i - 1];
+          const [x2, y2] = ann.points[i];
+          page.drawLine({
+            start: { x: x1, y: pageH - y1 },
+            end: { x: x2, y: pageH - y2 },
+            thickness: ann.width,
+            color,
+            opacity,
+          });
+        }
+      } else if (ann.type === "strikethrough") {
+        // Two parallel lines offset perpendicular to the drag direction.
+        const dx = ann.x2 - ann.x1;
+        const dy = ann.y2 - ann.y1;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const off = (ann.gap ?? 2.5) / 2;
+        [off, -off].forEach(s => {
+          const sx1 = ann.x1 + nx * s;
+          const sy1 = ann.y1 + ny * s;
+          const sx2 = ann.x2 + nx * s;
+          const sy2 = ann.y2 + ny * s;
+          page.drawLine({
+            start: { x: sx1, y: pageH - sy1 },
+            end: { x: sx2, y: pageH - sy2 },
+            thickness: ann.strokeWidth,
+            color,
+            opacity,
+          });
+        });
+      } else if (ann.type === "comment") {
+        // Bake onto the page. Because we extended the page width above to
+        // include the gutter area, comments can now be drawn at their
+        // ACTUAL editor positions (no horizontal clamping). Only vertical
+        // clamping is applied as a safety.
+        const boxW = ann.boxW;
+        const boxH = ann.boxH;
+        const destBoxX = ann.boxX;
+        let destBoxY = ann.boxY;
+        if (destBoxY < 5) destBoxY = 5;
+        if (destBoxY + boxH > pageH - 5) destBoxY = pageH - boxH - 5;
+        // Background (pale yellow) + border
+        page.drawRectangle({
+          x: destBoxX,
+          y: pageH - destBoxY - boxH,
+          width: boxW,
+          height: boxH,
+          color: rgb(1, 0.96, 0.85),
+          borderColor: color,
+          borderWidth: 1,
+          opacity: 0.95,
+          borderOpacity: 1,
+        });
+        // Anchor (rect or dot) + leader line start point.
+        const hasRectAnchor = (ann.w || 0) > 0 && (ann.h || 0) > 0;
+        const lineStartX = hasRectAnchor ? ann.x + ann.w : ann.x;
+        const lineStartY = hasRectAnchor ? ann.y + ann.h / 2 : ann.y;
+        // Leader line: anchor → left-middle of the comment box.
+        page.drawLine({
+          start: { x: lineStartX, y: pageH - lineStartY },
+          end:   { x: destBoxX,   y: pageH - (destBoxY + boxH / 2) },
+          thickness: 0.8,
+          color,
+          opacity: 1,
+        });
+        if (hasRectAnchor) {
+          // Anchor rectangle: subtle highlight + dashed outline.
+          page.drawRectangle({
+            x: ann.x,
+            y: pageH - ann.y - ann.h,
+            width: ann.w,
+            height: ann.h,
+            color,
+            opacity: 0.15,
+            borderColor: color,
+            borderWidth: 0.6,
+            borderOpacity: 1,
+          });
+        } else {
+          // Point anchor: small dot.
+          page.drawCircle({
+            x: ann.x,
+            y: pageH - ann.y,
+            size: 2,
+            color,
+            borderColor: color,
+            borderWidth: 0.5,
+          });
+        }
+        // Body text + replies, wrapped and packed top-down into the box.
+        // The replies are visually separated from the main body by a thin
+        // divider line drawn between them.
+        {
+          const padL = 4, padT = 4;
+          const fs = ann.fontSize || 11;
+          const lineH = fs * TEXT_LINE_HEIGHT;
+          const maxWText = boxW - padL * 2;
+          const bottomLimit = destBoxY + boxH - 2;
+          let cursorYTop = destBoxY + padT;
+
+          const drawBlock = (rawText, indentPt) => {
+            if (!rawText) return;
+            if (!fontIsJp && !isLatin1(rawText)) { skipped++; return; }
+            const lines = wrapTextToLines(rawText, maxWText - indentPt, fs);
+            for (const line of lines) {
+              const baselineYTop = cursorYTop + fs;
+              if (baselineYTop > bottomLimit) return; // overflow
+              if (line) {
+                try {
+                  page.drawText(line, {
+                    x: destBoxX + padL + indentPt,
+                    y: pageH - baselineYTop,
+                    size: fs,
+                    font,
+                    color: rgb(0.13, 0.13, 0.13),
+                    opacity: 1,
+                  });
+                } catch (e) {
+                  console.warn("コメント本文の埋め込みに失敗:", line, e);
+                  skipped++;
+                }
+              }
+              cursorYTop += lineH;
+            }
+          };
+
+          drawBlock(ann.text || "", 0);
+        }
+
+        // Replies are baked as SEPARATE floating cards at positions computed
+        // the same way the editor lays them out (auto-stacked below the
+        // parent). The page width was already extended in the pre-pass so
+        // these positions fall inside the MediaBox.
+        const replies = Array.isArray(ann.replies) ? ann.replies : [];
+        if (replies.length > 0) {
+          const fs = ann.fontSize || 11;
+          const REPLY_GAP_PT = 5;
+          const REPLY_INDENT_PT = 12;
+          const REPLY_HEAD_H_PT = 14;
+          const replyW0 = Math.max(80, ann.boxW - REPLY_INDENT_PT);
+          const replyBaseX = ann.boxX + REPLY_INDENT_PT;
+          let cursorYRaw = ann.boxY + ann.boxH + REPLY_GAP_PT;
+          for (let rIdx = 0; rIdx < replies.length; rIdx++) {
+            const rText = replies[rIdx] || "";
+            // Compute height for this reply
+            const lines = wrapTextToLines(rText || " ", replyW0 - 12, fs);
+            const bodyH = Math.max(fs * 1.5, lines.length * fs * 1.35 + 6);
+            const cardH = REPLY_HEAD_H_PT + bodyH;
+
+            // Replies: page was already extended to fit them (pre-pass), so
+            // no X clamping. Only clamp Y as a safety.
+            const destRX = replyBaseX;
+            let destRY = cursorYRaw;
+            if (destRY + cardH > pageH - 5) destRY = pageH - cardH - 5;
+            if (destRY < 5) destRY = 5;
+
+            // Encodable guard
+            const encodable = fontIsJp || isLatin1(rText);
+            if (!encodable) skipped++;
+
+            // Card background + border
+            page.drawRectangle({
+              x: destRX,
+              y: pageH - destRY - cardH,
+              width: replyW0,
+              height: cardH,
+              color: rgb(1.0, 0.988, 0.945),
+              borderColor: rgb(0.878, 0.69, 0.314),
+              borderWidth: 0.8,
+              opacity: 1,
+              borderOpacity: 1,
+            });
+            // Header band
+            page.drawRectangle({
+              x: destRX,
+              y: pageH - destRY - REPLY_HEAD_H_PT,
+              width: replyW0,
+              height: REPLY_HEAD_H_PT,
+              color: rgb(1.0, 0.91, 0.69),
+              borderWidth: 0,
+              opacity: 1,
+            });
+            // Header label
+            try {
+              const labelSize = Math.max(fs * 0.8, 7);
+              page.drawText(`↳ 返信 ${rIdx + 1}`, {
+                x: destRX + 4,
+                y: pageH - destRY - REPLY_HEAD_H_PT + (REPLY_HEAD_H_PT - labelSize) / 2,
+                size: labelSize,
+                font,
+                color: rgb(0.4, 0.2, 0),
+                opacity: 1,
+              });
+            } catch (e) { /* ignore header label failure */ }
+            // Body lines
+            if (encodable) {
+              let by = destRY + REPLY_HEAD_H_PT + 4 + fs;
+              for (const line of lines) {
+                if (by > destRY + cardH - 2) break;
+                if (line) {
+                  try {
+                    page.drawText(line, {
+                      x: destRX + 4,
+                      y: pageH - by,
+                      size: fs,
+                      font,
+                      color: rgb(0.13, 0.13, 0.13),
+                      opacity: 1,
+                    });
+                  } catch (e) {
+                    console.warn("返信本文の埋め込みに失敗:", line, e);
+                    skipped++;
+                  }
+                }
+                by += fs * 1.35;
+              }
+            }
+            cursorYRaw += cardH + REPLY_GAP_PT;
+          }
+        }
+      } else if (ann.type === "text") {
+        // Skip text the current font cannot encode (Helvetica + 日本語など).
+        if (!fontIsJp && !isLatin1(ann.text)) {
+          skipped++;
+          return;
+        }
+        migrateTextAnnotation(ann);
+        const widthPt = ann.w ?? TEXT_DEFAULT_WIDTH_PT;
+        const lines = wrapTextToLines(ann.text, widthPt, ann.fontSize);
+        // ann.y is the top-of-box. First line baseline sits 1 em below.
+        const lineH = ann.fontSize * TEXT_LINE_HEIGHT;
+        lines.forEach((line, i) => {
+          if (!line) return;
+          const baselineY = ann.y + ann.fontSize + i * lineH;
+          try {
+            page.drawText(line, {
+              x: ann.x,
+              y: pageH - baselineY,
+              size: ann.fontSize,
+              font,
+              color,
+              opacity,
+            });
+          } catch (e) {
+            console.warn("テキスト注釈の埋め込みに失敗:", line, e);
+            skipped++;
+          }
+        });
+      }
+    });
+  });
+  if (skipped > 0) {
+    toast(`${skipped} 個のテキスト注釈をスキップ (フォント未対応文字)`, 4500);
+  }
+}
+
+async function downloadPdf() {
+  // Bake into a fresh copy so the in-memory doc stays editable.
+  const bytes = await state.pdfDoc.save();
+  const outDoc = await PDFDocument.load(bytes);
+  await burnAnnotationsIntoPdf(outDoc);
+  const outBytes = await outDoc.save();
+  const blob = new Blob([outBytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = state.fileName.replace(/\.pdf$/i, "") + "_edited.pdf";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ============================================================================
+// Wire UI
+// ============================================================================
+document.getElementById("btn-open").addEventListener("click", () =>
+  document.getElementById("file-pdf").click());
+document.getElementById("file-pdf").addEventListener("change", e => {
+  if (e.target.files[0]) loadPdfFromFile(e.target.files[0]);
+  e.target.value = "";
+});
+
+document.getElementById("btn-merge").addEventListener("click", () =>
+  document.getElementById("file-pdf-multi").click());
+document.getElementById("file-pdf-multi").addEventListener("change", async e => {
+  for (const f of e.target.files) await appendPdfFromFile(f);
+  e.target.value = "";
+});
+
+document.getElementById("btn-img2pdf").addEventListener("click", () =>
+  document.getElementById("file-img").click());
+document.getElementById("file-img").addEventListener("change", e => {
+  if (e.target.files.length) imagesToPdf(Array.from(e.target.files));
+  e.target.value = "";
+});
+
+// Font pulldown: switch embedded font OR open file picker for custom.
+const fontSelectEl = document.getElementById("font-select");
+refreshFontSelect();
+fontSelectEl.addEventListener("change", (e) => {
+  const val = e.target.value;
+  if (val === "_load") {
+    // Trigger file picker; revert the select so it doesn't stay on "_load".
+    fontSelectEl.value = String(currentFontIdx);
+    document.getElementById("file-font").click();
+    return;
+  }
+  const idx = parseInt(val, 10);
+  if (isNaN(idx) || idx < 0 || idx >= fontRegistry.length) return;
+  currentFontIdx = idx;
+  // Clear cache; next embed will repopulate from the new selection.
+  jpFontBytesCache = fontRegistry[idx].bytes || null;
+  jpFontFetchPromise = null;
+  jpFontSourceLabel = fontRegistry[idx].name;
+  toast(`フォント選択: ${fontRegistry[idx].name}`);
+});
+document.getElementById("file-font").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    await setJpFontFromFile(file);
+  } catch (err) {
+    alert("フォントファイルの読み込みに失敗しました: " + err.message);
+  }
+});
+
+// ---- Zoom ---------------------------------------------------------------
+async function setZoom(newScale, opts = {}) {
+  const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newScale));
+  if (Math.abs(clamped - VIEW_SCALE) < 0.005) return;
+  VIEW_SCALE = clamped;
+  updateZoomLabel();
+  if (!state.pdfDoc) return;
+  // Preserve approximate scroll position as a ratio of total scrollHeight.
+  const prevTop = viewer.scrollTop;
+  const prevTotal = viewer.scrollHeight || 1;
+  const ratio = prevTop / prevTotal;
+  await renderPages();
+  viewer.scrollTop = ratio * (viewer.scrollHeight || 1);
+  if (!opts.quiet) toast(`ズーム: ${Math.round(VIEW_SCALE * 100 / 1.4)}% (表示倍率 ${(VIEW_SCALE).toFixed(2)}×)`);
+}
+
+function updateZoomLabel() {
+  const btn = document.getElementById("btn-zoom-reset");
+  if (!btn) return;
+  // Display as a percentage of the nominal default (VIEW_SCALE 1.4 = 100%).
+  btn.textContent = `${Math.round(VIEW_SCALE * 100 / 1.4)}%`;
+}
+
+document.getElementById("btn-zoom-in").addEventListener("click", () =>
+  setZoom(VIEW_SCALE * ZOOM_STEP));
+document.getElementById("btn-zoom-out").addEventListener("click", () =>
+  setZoom(VIEW_SCALE / ZOOM_STEP));
+document.getElementById("btn-zoom-reset").addEventListener("click", () =>
+  setZoom(ZOOM_DEFAULT));
+
+document.getElementById("btn-clear").addEventListener("click", async () => {
+  if (!confirm("現在のPDFをクリアしますか？")) return;
+  state.pdfDoc = null;
+  state.pdfBytes = null;
+  state.annotations = [];
+  state.selectedPages = new Set();
+  state.lastClickedPage = null;
+  state.selectionCursor = null;
+  await refresh();
+});
+
+document.getElementById("btn-save").addEventListener("click", downloadPdf);
+
+// Tool buttons
+document.querySelectorAll(".tb-btn.tool").forEach(b => {
+  b.addEventListener("click", () => {
+    // Switching to a drawing tool deselects whatever is currently selected.
+    if (b.dataset.tool !== "select" && state.selected) deselectAnnotation();
+    setTool(b.dataset.tool);
+  });
+});
+
+// Property panel inputs
+document.getElementById("prop-color").addEventListener("input",
+  e => applyPropertyPanelEdit("color", e.target.value));
+document.getElementById("prop-fontsize").addEventListener("input",
+  e => applyPropertyPanelEdit("fontSize", e.target.value));
+document.getElementById("prop-stroke").addEventListener("input",
+  e => applyPropertyPanelEdit("stroke", e.target.value));
+document.getElementById("prop-w").addEventListener("input",
+  e => applyPropertyPanelEdit("w", e.target.value));
+document.getElementById("prop-h").addEventListener("input",
+  e => applyPropertyPanelEdit("h", e.target.value));
+document.getElementById("prop-opacity").addEventListener("input",
+  e => applyPropertyPanelEdit("opacity", e.target.value));
+document.getElementById("prop-delete").addEventListener("click", () => {
+  if (!state.selected) return;
+  const { pageIdx, index } = state.selected;
+  deleteAnnotationAt(pageIdx, index);
+});
+document.getElementById("tool-color").addEventListener("input", e => {
+  state.toolColor = e.target.value;
+});
+document.getElementById("tool-size").addEventListener("input", e => {
+  state.toolSize = parseFloat(e.target.value) || 14;
+  if (state.toolSizes[state.currentTool] !== undefined) {
+    state.toolSizes[state.currentTool] = state.toolSize;
+  }
+});
+
+// Page number modal
+const pnModal = document.getElementById("pn-modal");
+document.getElementById("btn-pagenum").addEventListener("click", () => pnModal.classList.add("show"));
+document.getElementById("pn-cancel").addEventListener("click", () => pnModal.classList.remove("show"));
+document.getElementById("pn-ok").addEventListener("click", async () => {
+  const opts = {
+    position: document.getElementById("pn-pos").value,
+    format: document.getElementById("pn-format").value || "{page}",
+    fontSize: parseInt(document.getElementById("pn-size").value) || 12,
+    startNumber: parseInt(document.getElementById("pn-start").value) || 1,
+    skipPages: (document.getElementById("pn-skip").value || "")
+      .split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n)),
+  };
+  pnModal.classList.remove("show");
+  await addPageNumbers(opts);
+});
+
+// Escape key clears the current selection.
+// Global pointerdown — controls comment ACTIVE state.
+//
+// The activation trigger is the ANCHOR (the dashed rectangle or dot on the
+// PDF body itself that was drag-selected when the comment was created) —
+// NOT the comment box in the gutter. This matches the user's mental model:
+// "the body-side marker is what represents the comment; click it to edit."
+//
+//   - Press on a .comment-anchor-rect / .comment-anchor-dot → activate
+//   - Press inside an already-existing comment / reply       → keep state
+//     (so dragging the header or clicking the fill handle on an already-
+//     active comment does NOT trigger deactivate-then-reactivate churn)
+//   - Press anywhere else                                    → deactivate
+//
+// Uses pointerdown instead of click so that the drag-to-create finish does
+// NOT deactivate the just-created comment via a spurious post-drag click.
+document.addEventListener("pointerdown", (e) => {
+  // Anchor rect/dot OR one of its resize handles → activate the comment.
+  // (.anchor-handle must be recognised as "belongs to active comment" so
+  // clicking a handle doesn't fall through to the deactivation branch.)
+  const anchorHit = e.target.closest(
+    ".comment-anchor-rect, .comment-anchor-dot, .anchor-handle"
+  );
+  if (anchorHit && anchorHit.dataset.commentKey) {
+    setActiveCommentByKey(anchorHit.dataset.commentKey);
+    return;
+  }
+  // Press inside an existing comment / reply — leave state as-is so drag
+  // handlers on an already-active comment can start a drag.
+  if (e.target.closest(".comment-box") || e.target.closest(".reply-box")) {
+    return;
+  }
+  // Press anywhere else → deactivate any active comment.
+  if (state.activeCommentKey !== null) {
+    setActiveCommentByKey(null);
+  }
+}, true);   // capture phase so this runs before other pointerdown handlers
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && state.selected) {
+    deselectAnnotation();
+    return;
+  }
+  // Enter key commits any selected annotation (text, highlight, frame, pen,
+  // strikethrough, comment) by removing its selection chrome. Skipped if the
+  // user is typing inside an input / textarea / contenteditable, so Enter in
+  // the text-editor textarea or a comment body still inserts a newline /
+  // commits that inner editor, not the selection.
+  if (e.key === "Enter" && state.selected) {
+    const tgt = e.target;
+    if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" ||
+                tgt.isContentEditable)) return;
+    if (e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    deselectAnnotation();
+    return;
+  }
+  // Delete / Backspace keys: delete the multi-selected pages from the
+  // thumbnail strip. Skipped when the user is typing in any text field so
+  // Backspace in a textarea / comment body still works normally.
+  if (e.key === "Delete" || e.key === "Backspace") {
+    const tgt = e.target;
+    if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" ||
+                tgt.isContentEditable)) return;
+    if (!state.pdfDoc) return;
+    if (state.selectedPages.size === 0) return;
+    e.preventDefault();
+    deletePagesMany(Array.from(state.selectedPages));
+    return;
+  }
+  // Arrow keys:
+  //   - plain ← / →            → REORDER selected pages by one step
+  //   - Shift + ← / →          → EXTEND multi-selection by one thumbnail
+  // Skip when the user is typing in any text field / contenteditable.
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" ||
+            (t.isContentEditable))) return;
+  if (e.isComposing || e.keyCode === 229) return;
+  if (!state.pdfDoc) return;
+  const total = state.pdfDoc.getPageCount();
+  const dir = e.key === "ArrowLeft" ? -1 : 1;
+
+  if (e.shiftKey) {
+    // --- Extend selection (NEVER reorders) ---
+    // Initialize anchor / cursor if nothing is selected yet.
+    if (state.selectedPages.size === 0) {
+      const start = 0;
+      state.selectedPages = new Set([start]);
+      state.lastClickedPage = start;
+      state.selectionCursor = start;
+      updateThumbSelectionClass();
+      e.preventDefault();
+      return;
+    }
+    if (state.lastClickedPage === null) {
+      const first = Math.min(...state.selectedPages);
+      state.lastClickedPage = first;
+    }
+    if (state.selectionCursor === null || state.selectionCursor === undefined) {
+      state.selectionCursor = state.lastClickedPage;
+    }
+    const newCursor = state.selectionCursor + dir;
+    if (newCursor < 0 || newCursor >= total) return;
+    state.selectionCursor = newCursor;
+    const a = Math.min(state.lastClickedPage, newCursor);
+    const b = Math.max(state.lastClickedPage, newCursor);
+    state.selectedPages = new Set();
+    for (let i = a; i <= b; i++) state.selectedPages.add(i);
+    updateThumbSelectionClass();
+    // Scroll the cursor thumb into view.
+    const targetThumb = strip.querySelector(`.thumb[data-page-num="${newCursor + 1}"]`);
+    if (targetThumb) targetThumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    e.preventDefault();
+    return;
+  }
+
+  // --- Plain arrow: reorder (move) selected pages by 1 ---
+  if (state.selectedPages.size === 0) return;
+  e.preventDefault();
+  const sources = Array.from(state.selectedPages).sort((a, b) => a - b);
+  if (dir === -1) {
+    if (sources[0] <= 0) return;
+    reorderPdfMany(sources, sources[0] - 1);
+  } else {
+    if (sources[sources.length - 1] >= total - 1) return;
+    reorderPdfMany(sources, sources[sources.length - 1] + 2);
+  }
+});
+
+// Drag-and-drop file open onto the viewer
+viewer.addEventListener("dragover", e => { e.preventDefault(); });
+viewer.addEventListener("drop", async e => {
+  e.preventDefault();
+  const files = Array.from(e.dataTransfer.files);
+  if (!files.length) return;
+  const pdfs = files.filter(f => f.type === "application/pdf");
+  const imgs = files.filter(f => f.type === "image/png" || f.type === "image/jpeg");
+  if (pdfs.length === 1 && imgs.length === 0) {
+    await loadPdfFromFile(pdfs[0]);
+  } else if (pdfs.length > 1) {
+    await loadPdfFromFile(pdfs[0]);
+    for (let i = 1; i < pdfs.length; i++) await appendPdfFromFile(pdfs[i]);
+  } else if (imgs.length > 0) {
+    await imagesToPdf(imgs);
+  }
+});
+</script>
+</body>
+</html>

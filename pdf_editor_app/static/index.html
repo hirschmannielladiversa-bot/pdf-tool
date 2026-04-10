@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Editor</title>
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+    <!-- Menu Bar -->
+    <div id="menu-bar">
+        <div class="menu-left">
+            <div class="menu-item" data-menu="file">ファイル</div>
+            <div class="menu-item" data-menu="edit">編集</div>
+            <div class="menu-item" data-menu="view">表示</div>
+        </div>
+        <div class="menu-center" id="file-name">PDF Editor</div>
+    </div>
+
+    <!-- Dropdown Menus -->
+    <div class="dropdown-menu" id="menu-file">
+        <div class="dropdown-item" data-action="open">開く<span class="shortcut">Cmd+O</span></div>
+        <div class="dropdown-item" data-action="save">PDFに保存（上書き）<span class="shortcut">Cmd+S</span></div>
+        <div class="dropdown-item" data-action="save-as">名前を付けて保存<span class="shortcut">Cmd+Shift+S</span></div>
+        <div class="dropdown-item" data-action="page-numbers">ページ番号を追加</div>
+    </div>
+    <div class="dropdown-menu" id="menu-edit">
+        <div class="dropdown-item" data-action="undo">元に戻す<span class="shortcut">Cmd+Z</span></div>
+        <div class="dropdown-item" data-action="redo">やり直し<span class="shortcut">Cmd+Shift+Z</span></div>
+    </div>
+    <div class="dropdown-menu" id="menu-view">
+        <div class="dropdown-item" data-action="zoom-in">拡大<span class="shortcut">Cmd++</span></div>
+        <div class="dropdown-item" data-action="zoom-out">縮小<span class="shortcut">Cmd+-</span></div>
+        <div class="dropdown-item" data-action="fit-width">幅に合わせる</div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content">
+        <!-- PDF Viewer Area -->
+        <div id="viewer-area">
+            <div id="pdf-container">
+                <!-- Pages will be rendered here dynamically -->
+                <!-- Welcome message when no PDF is open -->
+                <div id="welcome-message">
+                    <div class="welcome-icon">PDF</div>
+                    <p>PDFファイルを開いてください</p>
+                    <button id="welcome-open-btn">ファイルを開く</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toolbar (right column) -->
+        <div id="toolbar">
+            <!-- Toolbar buttons injected by toolbar.js -->
+        </div>
+    </div>
+
+    <!-- Page Thumbnails Strip -->
+    <div id="thumbnail-strip">
+        <!-- Thumbnails injected by page-manager.js -->
+    </div>
+
+    <!-- Comment Panel (collapsible) -->
+    <div id="comment-panel">
+        <div id="comment-panel-header">
+            <span>コメント</span>
+            <button id="comment-toggle">&#9660;</button>
+        </div>
+        <div id="comment-list">
+            <!-- Comments injected by comment-panel.js -->
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- Custom Input Dialog (replaces prompt() which is blocked in WKWebView) -->
+    <div id="input-dialog-overlay" class="dialog-overlay" style="display:none">
+        <div class="dialog-box">
+            <div class="dialog-title" id="input-dialog-title">入力</div>
+            <input type="text" id="input-dialog-input" class="dialog-input" placeholder="テキストを入力..." />
+            <div id="input-dialog-options" class="dialog-options" style="display:none">
+                <label class="dialog-option-label">フォントサイズ:
+                    <select id="input-dialog-fontsize" class="dialog-select">
+                        <option value="8">8</option>
+                        <option value="10">10</option>
+                        <option value="12" selected>12</option>
+                        <option value="14">14</option>
+                        <option value="16">16</option>
+                        <option value="18">18</option>
+                        <option value="20">20</option>
+                        <option value="24">24</option>
+                        <option value="28">28</option>
+                        <option value="32">32</option>
+                        <option value="36">36</option>
+                        <option value="48">48</option>
+                    </select>
+                </label>
+                <label class="dialog-option-label">色:
+                    <input type="color" id="input-dialog-color" class="dialog-color" value="#FF0000" />
+                </label>
+            </div>
+            <div class="dialog-buttons">
+                <button id="input-dialog-cancel" class="dialog-btn dialog-btn-cancel">キャンセル</button>
+                <button id="input-dialog-ok" class="dialog-btn dialog-btn-ok">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page Number Dialog -->
+    <div id="pagenum-dialog-overlay" class="dialog-overlay" style="display:none">
+        <div class="dialog-box">
+            <div class="dialog-title">ページ番号を追加</div>
+            <div class="dialog-options" style="flex-direction:column;align-items:stretch;gap:10px">
+                <label class="dialog-option-label">位置:
+                    <select id="pagenum-position" class="dialog-select">
+                        <option value="bottom-center" selected>下中央</option>
+                        <option value="bottom-left">下左</option>
+                        <option value="bottom-right">下右</option>
+                        <option value="top-center">上中央</option>
+                        <option value="top-left">上左</option>
+                        <option value="top-right">上右</option>
+                    </select>
+                </label>
+                <label class="dialog-option-label">書式:
+                    <input type="text" id="pagenum-format" class="dialog-input" value="{page}" style="width:180px" />
+                </label>
+                <label class="dialog-option-label">フォントサイズ:
+                    <input type="number" id="pagenum-fontsize" class="dialog-input" value="10" min="6" max="48" style="width:80px" />
+                </label>
+                <label class="dialog-option-label">開始番号:
+                    <input type="number" id="pagenum-start" class="dialog-input" value="1" min="1" style="width:80px" />
+                </label>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+                    書式例: {page} / {page} of {total} / - {page} -
+                </div>
+            </div>
+            <div class="dialog-buttons">
+                <button id="pagenum-dialog-cancel" class="dialog-btn dialog-btn-cancel">キャンセル</button>
+                <button id="pagenum-dialog-ok" class="dialog-btn dialog-btn-ok">追加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

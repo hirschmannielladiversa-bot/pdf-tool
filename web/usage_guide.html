@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDFproject 使い方ガイド</title>
+<style>
+  :root {
+    --bg: #fafbfc;
+    --card: #ffffff;
+    --text: #1f2328;
+    --muted: #656d76;
+    --accent: #0969da;
+    --border: #d0d7de;
+    --code-bg: #f6f8fa;
+    --warn: #fff8c5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Hiragino Sans", "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    line-height: 1.7;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+  header {
+    background: linear-gradient(135deg, #0969da, #218bff);
+    color: #fff;
+    padding: 40px 24px;
+    border-radius: 12px;
+    margin-bottom: 32px;
+    box-shadow: 0 4px 16px rgba(9,105,218,0.15);
+  }
+  header h1 { margin: 0 0 8px; font-size: 32px; }
+  header p { margin: 0; opacity: 0.95; font-size: 16px; }
+  nav {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 28px;
+    margin-bottom: 32px;
+  }
+  nav h2 { margin: 0 0 12px; font-size: 16px; color: var(--muted); }
+  nav ul { margin: 0; padding-left: 20px; }
+  nav li { margin: 4px 0; }
+  nav a { color: var(--accent); text-decoration: none; }
+  nav a:hover { text-decoration: underline; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 32px;
+    margin-bottom: 24px;
+  }
+  section h2 {
+    margin-top: 0;
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 8px;
+    font-size: 24px;
+  }
+  section h3 { margin-top: 28px; font-size: 18px; color: var(--text); }
+  section h4 { margin-top: 20px; font-size: 15px; color: var(--muted); }
+  code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 90%;
+  }
+  pre {
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 16px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--code-bg); font-weight: 600; }
+  .tool-card {
+    background: var(--code-bg);
+    border-left: 4px solid var(--accent);
+    padding: 16px 20px;
+    border-radius: 6px;
+    margin: 16px 0;
+  }
+  .tool-card h3 { margin: 0 0 8px; }
+  .tip {
+    background: var(--warn);
+    border-left: 4px solid #d4a72c;
+    padding: 12px 18px;
+    border-radius: 6px;
+    margin: 12px 0;
+  }
+  .badge {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 24px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>PDFproject 使い方ガイド</h1>
+    <p>画像→PDF変換 と PDF操作ツール集 — Python 3.13 + macOS</p>
+  </header>
+
+  <nav>
+    <h2>目次</h2>
+    <ul>
+      <li><a href="#overview">プロジェクト概要</a></li>
+      <li><a href="#install">インストール</a></li>
+      <li><a href="#tools">6つのツール</a></li>
+      <li><a href="#patterns">よくある使い方パターン</a></li>
+      <li><a href="#picker">ツール選択早見表</a></li>
+      <li><a href="#editor">Web版エディタ (pdf_editor_app)</a></li>
+      <li><a href="#troubleshoot">トラブルシューティング</a></li>
+      <li><a href="#structure">プロジェクト構造</a></li>
+    </ul>
+  </nav>
+
+  <section id="overview">
+    <h2>プロジェクト概要</h2>
+    <p><strong>PDFproject</strong> は、画像のPDF化からPDF分割・結合・編集・ページ番号付与・バッチ処理までを一つに揃えた CLI/GUI ツール集です。すべて Python で実装されており、各機能は独立した1ファイルで構成されています。</p>
+    <table>
+      <tr><th>項目</th><th>内容</th></tr>
+      <tr><td>言語</td><td>Python 3.13+</td></tr>
+      <tr><td>主要ライブラリ</td><td>Pillow / pypdf / reportlab / tkinter</td></tr>
+      <tr><td>テスト</td><td>pytest（全112テスト成功）</td></tr>
+      <tr><td>動作環境</td><td>macOS（GUI は tkinter 標準）</td></tr>
+      <tr><td>ライセンス</td><td>MIT</td></tr>
+    </table>
+  </section>
+
+  <section id="install">
+    <h2>インストール</h2>
+    <pre><code># 依存ライブラリをまとめてインストール
+pip install -r requirements.txt
+
+# 個別にインストールする場合
+pip install pypdf reportlab Pillow pytest</code></pre>
+    <div class="tip">💡 macOSでは <code>tkinter</code> は標準で含まれます。表示されない場合は <code>brew reinstall python@3.13</code> で再インストール。</div>
+  </section>
+
+  <section id="tools">
+    <h2>6つのツール</h2>
+
+    <div class="tool-card">
+      <h3>1. img2pdf.py — 画像→PDF変換</h3>
+      <p>PNG/JPEGの画像群を1つのPDFにまとめます。透過PNGは白背景に合成。</p>
+      <pre><code>python3 img2pdf.py --select-files                # GUI
+python3 img2pdf.py page1.png page2.jpg -o out.pdf
+python3 img2pdf.py ./screenshots -o report.pdf
+python3 img2pdf.py ./pages --recursive -o book.pdf</code></pre>
+      <p><strong>主なオプション</strong>: <code>-o</code> 出力先 / <code>--recursive</code> サブフォルダ含む / <code>-q</code> 画質(1-100, 既定95) / <code>--verbose</code></p>
+    </div>
+
+    <div class="tool-card">
+      <h3>2. pdf_splitter.py — PDF分割</h3>
+      <p>ページ範囲指定で複数ファイルに分割します。</p>
+      <pre><code>python3 pdf_splitter.py --select-files
+python3 pdf_splitter.py input.pdf --ranges "1-3,4-7,8-10" -o ./split
+python3 pdf_splitter.py document.pdf --ranges "5" -o ./pages</code></pre>
+      <p><strong>範囲指定</strong>: <code>1-3</code> / <code>1:3</code> / <code>5</code> / <code>1-3,5,7-9</code></p>
+    </div>
+
+    <div class="tool-card">
+      <h3>3. pdf_merger.py — PDF結合</h3>
+      <p>複数のPDFを1つに結合（最低2ファイル必須）。入力順序がそのまま結合順序になります。</p>
+      <pre><code>python3 pdf_merger.py --select-files
+python3 pdf_merger.py file1.pdf file2.pdf -o merged.pdf
+python3 pdf_merger.py chapter*.pdf -o book.pdf</code></pre>
+    </div>
+
+    <div class="tool-card">
+      <h3>4. pdf_edit.py — ページ削除・並べ替え・挿入</h3>
+      <p>1つのコマンドで複数操作を組み合わせ可能です。</p>
+      <pre><code># 削除
+python3 pdf_edit.py input.pdf --delete "1,3,5-7" -o out.pdf
+
+# 並べ替え（全ページ指定が必要）
+python3 pdf_edit.py input.pdf --reorder "3,1,2,4-10" -o out.pdf
+
+# 別PDFから挿入: source.pdf:pages@position
+python3 pdf_edit.py input.pdf --insert "cover.pdf:1@1" -o out.pdf
+
+# 複数操作の組み合わせ
+python3 pdf_edit.py input.pdf --delete "1,5" --reorder "2,1,3-10" -o out.pdf</code></pre>
+    </div>
+
+    <div class="tool-card">
+      <h3>5. pdf_page_number.py — ページ番号挿入</h3>
+      <p>6つの位置指定とカスタムフォーマットに対応。</p>
+      <pre><code>python3 pdf_page_number.py input.pdf -o out.pdf \
+  --position bottom-right \
+  --format "{page}/{total}"
+
+# 表紙をスキップ
+python3 pdf_page_number.py book.pdf -o numbered.pdf --skip-pages "1,2"
+
+# 日本語フォーマット
+python3 pdf_page_number.py input.pdf -o out.pdf --format "第{page}ページ"</code></pre>
+      <table>
+        <tr><th>位置</th><th>値</th></tr>
+        <tr><td>上部 左 / 中央 / 右</td><td><code>top-left</code> / <code>top-center</code> / <code>top-right</code></td></tr>
+        <tr><td>下部 左 / 中央 / 右</td><td><code>bottom-left</code> / <code>bottom-center</code> / <code>bottom-right</code></td></tr>
+      </table>
+    </div>
+
+    <div class="tool-card">
+      <h3>6. pdf_batch.py — バッチ処理 <span class="badge">NEW</span></h3>
+      <p>ディレクトリ内の全PDFに対し同一操作を一括実行。最後に成功/失敗のサマリーを表示します。</p>
+      <pre><code># 一括ページ番号追加
+python3 pdf_batch.py add-page-numbers \
+  --input-dir ./pdfs --output-dir ./numbered \
+  --position bottom-right --format "{page}/{total}"
+
+# 一括分割
+python3 pdf_batch.py split \
+  --input-dir ./pdfs --output-dir ./split --ranges "1-5,6-10"
+
+# 一括ページ削除
+python3 pdf_batch.py delete \
+  --input-dir ./pdfs --output-dir ./edited --delete-pages "1"</code></pre>
+    </div>
+  </section>
+
+  <section id="patterns">
+    <h2>よくある使い方パターン</h2>
+
+    <h3>パターン1: スキャン画像をPDFにまとめる</h3>
+    <pre><code>python3 img2pdf.py ./scanned_images -o document.pdf</code></pre>
+
+    <h3>パターン2: 大きなPDFを章ごとに分割</h3>
+    <pre><code>python3 pdf_splitter.py book.pdf --ranges "1-20,21-50,51-100" -o ./chapters</code></pre>
+
+    <h3>パターン3: 複数PDFを1冊の本に結合</h3>
+    <pre><code>python3 pdf_merger.py cover.pdf intro.pdf chapter1.pdf chapter2.pdf -o book.pdf</code></pre>
+
+    <h3>パターン4: 不要ページの削除と並べ替え</h3>
+    <pre><code>python3 pdf_edit.py presentation.pdf --delete "2,5,8-10" -o cleaned.pdf</code></pre>
+
+    <h3>パターン5: ページ番号を追加（表紙はスキップ）</h3>
+    <pre><code>python3 pdf_page_number.py document.pdf -o numbered.pdf \
+  --skip-pages "1" --position bottom-right --format "{page}/{total}"</code></pre>
+
+    <h3>実践例: 論文PDFのフル組み立て</h3>
+    <pre><code># 1. フィギュア画像をPDFに
+python3 img2pdf.py ./figures -o figures.pdf
+
+# 2. 章PDFと結合
+python3 pdf_merger.py cover.pdf abstract.pdf intro.pdf methods.pdf figures.pdf discussion.pdf -o draft.pdf
+
+# 3. 不要ページ削除
+python3 pdf_edit.py draft.pdf --delete "15,20-22" -o cleaned.pdf
+
+# 4. ページ番号付与（表紙・目次スキップ）
+python3 pdf_page_number.py cleaned.pdf -o final.pdf \
+  --skip-pages "1,2" --position bottom-center --format "- {page} -"</code></pre>
+  </section>
+
+  <section id="picker">
+    <h2>ツール選択早見表</h2>
+    <table>
+      <tr><th>やりたいこと</th><th>使うツール</th></tr>
+      <tr><td>画像をPDFにしたい</td><td><code>img2pdf.py</code></td></tr>
+      <tr><td>PDFを複数に分けたい</td><td><code>pdf_splitter.py</code></td></tr>
+      <tr><td>複数PDFを1つにしたい</td><td><code>pdf_merger.py</code></td></tr>
+      <tr><td>ページの削除/並べ替え/挿入</td><td><code>pdf_edit.py</code></td></tr>
+      <tr><td>ページ番号を付けたい</td><td><code>pdf_page_number.py</code></td></tr>
+      <tr><td>複数PDFに同じ操作を一括で</td><td><code>pdf_batch.py</code></td></tr>
+    </table>
+    <div class="tip">💡 全ツール共通: <code>--select-files</code> でGUIモード、<code>--verbose</code> で詳細ログ、<code>-o</code> で出力先指定。</div>
+  </section>
+
+  <section id="editor">
+    <h2>Web版エディタ (pdf_editor_app)</h2>
+    <p>ブラウザで動作するPDFエディタ。<code>StartEditor.command</code> をダブルクリックするか、以下のコマンドで起動できます。</p>
+    <pre><code>python3 run_editor.py
+# → ブラウザで http://localhost:5000 などにアクセス</code></pre>
+    <p><strong>構成</strong>: Flask ベースのアプリで、<code>api.py</code>（REST API）、<code>annotation_engine.py</code>（注釈処理）、<code>pdf_operations.py</code>（PDF操作）、<code>static/</code>（フロントエンド）から成ります。</p>
+  </section>
+
+  <section id="troubleshoot">
+    <h2>トラブルシューティング</h2>
+
+    <h3>ModuleNotFoundError: No module named 'pypdf'</h3>
+    <pre><code>pip install -r requirements.txt</code></pre>
+
+    <h3>tkinter not available for GUI mode</h3>
+    <pre><code>brew reinstall python@3.13</code></pre>
+
+    <h3>File is not a valid PDF</h3>
+    <p>元のPDFが破損している可能性があります。Adobe Acrobat Reader等で開けるか確認してください。</p>
+
+    <h3>出力ファイルが作られない</h3>
+    <ol>
+      <li>出力ディレクトリが存在するか: <code>mkdir -p ./output</code></li>
+      <li>書き込み権限があるか: <code>ls -la ./output</code></li>
+      <li>ディスク容量: <code>df -h</code></li>
+      <li><code>--verbose</code> で詳細ログを確認</li>
+    </ol>
+  </section>
+
+  <section id="structure">
+    <h2>プロジェクト構造</h2>
+    <pre><code>PDFproject/
+├── img2pdf.py              # 画像→PDF変換
+├── pdf_splitter.py         # PDF分割
+├── pdf_merger.py           # PDF結合
+├── pdf_edit.py             # PDFページ操作
+├── pdf_page_number.py      # PDFページ番号挿入
+├── pdf_batch.py            # PDFバッチ処理
+├── pdf_editor_app/         # Web版エディタ (Flask)
+│   ├── api.py
+│   ├── annotation_engine.py
+│   ├── pdf_operations.py
+│   └── static/
+├── tests/                  # pytest テスト (112 tests)
+├── StartEditor.command     # Web エディタ起動
+├── StartImg2Pdf.command    # img2pdf GUI 起動
+├── requirements.txt
+├── README.md
+├── USAGE_GUIDE.md
+└── CLAUDE.md / AGENTS.md / Plans.md  # 開発管理</code></pre>
+  </section>
+
+  <footer>
+    Generated from README.md / USAGE_GUIDE.md / CLAUDE.md — PDFproject 全6フェーズ完了
+  </footer>
+</div>
+</body>
+</html>

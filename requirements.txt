@@ -1,0 +1,23 @@
+# PDFproject Dependencies
+
+# 画像処理（img2pdf.py用）
+Pillow>=11.0.0
+
+# PDF操作（予定）
+# PyPDF2>=3.0.0    # 開発停止中のため非推奨
+pypdf>=5.0.0       # PyPDF2の後継、推奨
+
+# テスト
+pytest>=8.0.0
+pytest-cov>=5.0.0
+
+# 開発ツール（オプション）
+black>=24.0.0      # コードフォーマッター
+ruff>=0.3.0        # Linter
+mypy>=1.8.0        # 型チェッカー
+
+# ページ番号挿入（pdf_page_number.py用）
+reportlab>=4.0.0   # PDFテキスト生成
+
+# デスクトップGUI（pdf_editor_app用）
+pywebview>=5.0.0   # ネイティブウィンドウ + HTML/JS UI
