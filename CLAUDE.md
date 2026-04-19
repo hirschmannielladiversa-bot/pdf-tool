@@ -2,6 +2,8 @@
 
 **PDFproject - Claude Code Configuration**
 
+**現行バージョン: v1.3.0**（2026-04-19 — 詳細は [CHANGELOG.md](./CHANGELOG.md) 参照）
+
 ---
 
 ## プロジェクト概要

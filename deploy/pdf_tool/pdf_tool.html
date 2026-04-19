@@ -497,6 +497,10 @@ html, body {
 .sel-handle.ne, .sel-handle.sw { cursor: nesw-resize; }
 .sel-handle.n,  .sel-handle.s  { cursor: ns-resize; }
 .sel-handle.e,  .sel-handle.w  { cursor: ew-resize; }
+/* Strikethrough endpoint + mid-stretch + gap handles. */
+.sel-handle.p1, .sel-handle.p2 { cursor: grab; }
+.sel-handle.pm                 { cursor: ew-resize; fill: #f0a020; }
+.sel-handle.pg                 { cursor: ns-resize; fill: #20c060; }
 
 /* Floating property panel for the selected annotation. */
 #prop-panel {
@@ -791,11 +795,14 @@ html, body {
     <button class="tb-btn" id="btn-pagenum" disabled>ページ番号</button>
     <button class="tb-btn" id="btn-clear" disabled>クリア</button>
     <span class="tb-sep"></span>
+    <button class="tb-btn" id="btn-rotate-left" disabled title="選択ページを左90°回転 (未選択時は表示中のページ1枚)">↺左回転</button>
+    <button class="tb-btn" id="btn-rotate-right" disabled title="選択ページを右90°回転 (未選択時は表示中のページ1枚)">↻右回転</button>
+    <span class="tb-sep"></span>
     <button class="tb-btn" id="btn-zoom-out" title="ズームアウト">−</button>
     <button class="tb-btn" id="btn-zoom-reset" title="100% に戻す">100%</button>
     <button class="tb-btn" id="btn-zoom-in" title="ズームイン">＋</button>
     <span class="tb-sep"></span>
-    <button class="tb-btn primary" id="btn-save" disabled>ダウンロード</button>
+    <button class="tb-btn primary" id="btn-save" disabled title="編集内容を埋め込んだ PDF をダウンロード">保存・ダウンロード</button>
     <span class="tb-info" id="info">PDFが読み込まれていません</span>
   </div>
 
@@ -806,6 +813,7 @@ html, body {
       <p style="font-size:12px;margin-top:16px">
         ・サムネイルをドラッグして並べ替え（複数選択: Shift クリック=範囲 / Ctrl・Cmd クリック=個別トグル / Shift+←→=範囲拡張 / ←→=まとめて移動）<br>
         ・サムネ右上の × で 1 ページ削除 / 複数選択中に Delete・Backspace キーでまとめて削除<br>
+        ・「↺左回転 / ↻右回転」で 1 ページずつ回転（サムネ未選択時は表示中の 1 枚、複数選択でまとめて回転）<br>
         ・ツールバー右のズーム（−／100%／＋）で拡大縮小、フォントはプルダウンで切替<br>
         ・ツールバーで注釈ツールを選択 → ページ上で描画<br>
         ・「コメント」ツール: ページ上をクリック → 右外のガターに吹き出し。A− / A+ でサイズ、「返信」で返信追加、右下ハンドルで枠拡大<br>
@@ -872,6 +880,11 @@ html, body {
     <input type="number" id="prop-stroke" min="0.5" max="40" step="0.5">
     <span style="color:var(--muted);font-size:11px">pt</span>
   </div>
+  <div class="row" id="row-gap" style="display:none" title="二重線の間隔。大きい文字に合わせて広げると二重に見えます。">
+    <label>二重線の間隔</label>
+    <input type="number" id="prop-gap" min="0" max="40" step="0.5">
+    <span style="color:var(--muted);font-size:11px">pt</span>
+  </div>
   <div class="row" id="row-w" style="display:none">
     <label>幅</label>
     <input type="number" id="prop-w" min="2" step="1">
@@ -899,7 +912,7 @@ html, body {
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "lib/pdf.worker.min.js";
 
-const { PDFDocument, StandardFonts, rgb } = PDFLib;
+const { PDFDocument, StandardFonts, rgb, degrees } = PDFLib;
 
 // ----- Japanese font loaded on demand via fontkit ---------------------------
 // pdf-lib's StandardFonts only support Latin-1, so any Japanese content needs
@@ -1084,6 +1097,8 @@ const info = document.getElementById("info");
 const btnSave = document.getElementById("btn-save");
 const btnPagenum = document.getElementById("btn-pagenum");
 const btnClear = document.getElementById("btn-clear");
+const btnRotateLeft = document.getElementById("btn-rotate-left");
+const btnRotateRight = document.getElementById("btn-rotate-right");
 
 // ----- Toast ----------------------------------------------------------------
 function toast(msg, ms = 2000) {
@@ -1161,6 +1176,8 @@ async function refresh() {
   btnSave.disabled = !has;
   btnPagenum.disabled = !has;
   btnClear.disabled = !has;
+  btnRotateLeft.disabled = !has;
+  btnRotateRight.disabled = !has;
   if (!has) {
     viewer.innerHTML = "";
     viewer.appendChild(welcome);
@@ -1601,6 +1618,59 @@ async function deletePagesMany(indices) {
 }
 
 // ============================================================================
+// Page rotation
+// ============================================================================
+/** Rotate selected pages by the given angle (±90).
+ *  If no thumbnails are selected, falls back to the page currently
+ *  closest to the viewport center so single-page rotation is one click. */
+async function rotatePages(angleDelta) {
+  if (!state.pdfDoc) return;
+  const total = state.pdfDoc.getPageCount();
+  let targets;
+  if (state.selectedPages.size > 0) {
+    targets = Array.from(state.selectedPages)
+      .filter(i => i >= 0 && i < total)
+      .sort((a, b) => a - b);
+  } else {
+    // Fallback: rotate the page nearest the viewport center (i.e. the page
+    // the user is looking at). Lets users rotate one page without first
+    // clicking a thumbnail.
+    const wraps = Array.from(viewer.querySelectorAll(".page-wrap"));
+    const viewerRect = viewer.getBoundingClientRect();
+    const centerY = viewerRect.top + viewerRect.height / 2;
+    let bestIdx = -1, bestDist = Infinity;
+    for (const w of wraps) {
+      const r = w.getBoundingClientRect();
+      const mid = r.top + r.height / 2;
+      const d = Math.abs(mid - centerY);
+      if (d < bestDist) { bestDist = d; bestIdx = parseInt(w.dataset.pageIndex); }
+    }
+    targets = bestIdx >= 0 ? [bestIdx] : [];
+  }
+  if (!targets || targets.length === 0) {
+    toast("回転するページがありません");
+    return;
+  }
+  for (const idx of targets) {
+    const page = state.pdfDoc.getPage(idx);
+    const cur = page.getRotation().angle;
+    page.setRotation(degrees((cur + angleDelta + 360) % 360));
+  }
+  // Preserve selection across persist.
+  const preservedSelection = new Set(state.selectedPages);
+  const preservedAnchor = state.lastClickedPage;
+  const preservedCursor = state.selectionCursor;
+  await persist();
+  state.selectedPages = preservedSelection;
+  state.lastClickedPage = preservedAnchor;
+  state.selectionCursor = preservedCursor;
+  updateThumbSelectionClass();
+  toast(targets.length === 1
+    ? `ページ ${targets[0] + 1} を${angleDelta > 0 ? "右" : "左"}回転`
+    : `${targets.length} ページを${angleDelta > 0 ? "右" : "左"}回転`);
+}
+
+// ============================================================================
 // Annotation tools
 // ============================================================================
 function setTool(name) {
@@ -1624,13 +1694,26 @@ function applyToolModeToPage(wrap) {
 }
 
 // Convert a pointer event to PDF point coordinates relative to the SVG.
+// Uses the SVG's screen CTM so the conversion is exact regardless of any
+// CSS sub-pixel rounding on the page-wrap container — a getBoundingClientRect
+// based approach drifts when the page CSS width is non-integer.
 function pointToPdf(svg, e) {
+  const ctm = svg.getScreenCTM();
+  if (ctm) {
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const r = pt.matrixTransform(ctm.inverse());
+    return { x: r.x, y: r.y };
+  }
+  // Fallback (shouldn't happen): bounding-rect math.
   const rect = svg.getBoundingClientRect();
   const pdfW = parseFloat(svg.viewBox.baseVal.width);
   const pdfH = parseFloat(svg.viewBox.baseVal.height);
-  const x = (e.clientX - rect.left) / rect.width * pdfW;
-  const y = (e.clientY - rect.top) / rect.height * pdfH;
-  return { x, y };
+  return {
+    x: (e.clientX - rect.left) / rect.width * pdfW,
+    y: (e.clientY - rect.top) / rect.height * pdfH,
+  };
 }
 
 // ----- Text wrapping helpers ------------------------------------------------
@@ -1653,9 +1736,12 @@ let lastPointerDownInfo = { time: 0, pageIdx: -1, idx: -1 };
 
 /** Measure the width of *text* at *fontSize* (PDF points). Returns PDF points. */
 function measureTextWidth(text, fontSize) {
-  // Canvas font sizes are in CSS pixels; our fontSize is in PDF points.
-  _measureCtx.font = `${fontSize * VIEW_SCALE}px ${TEXT_FONT_STACK}`;
-  return _measureCtx.measureText(text).width / VIEW_SCALE;
+  // Use a fixed reference scale (4×) so wrap measurements are deterministic
+  // and do NOT depend on the current zoom level — otherwise text inserted at
+  // a low zoom would re-wrap (and visually shift) when the view is zoomed in.
+  const REF = 4;
+  _measureCtx.font = `${fontSize * REF}px ${TEXT_FONT_STACK}`;
+  return _measureCtx.measureText(text).width / REF;
 }
 
 /**
@@ -1856,7 +1942,8 @@ function attachToolHandlers(wrap, svg, pageIdx) {
         type: "frame",
         x: p.x, y: p.y, w: 0, h: 0,
         color: state.toolColor,
-        strokeWidth: state.toolSize / VIEW_SCALE,
+        // PDF point — same value persists into the saved PDF.
+        strokeWidth: state.toolSize,
         opacity: 1,
       };
       drawingEl = document.createElementNS(SVG_NS, "rect");
@@ -1873,7 +1960,7 @@ function attachToolHandlers(wrap, svg, pageIdx) {
         type: "strikethrough",
         x1: p.x, y1: p.y, x2: p.x, y2: p.y,
         color: state.toolColor,
-        strokeWidth: state.toolSize / VIEW_SCALE,
+        strokeWidth: state.toolSize,
         gap: 2.5,
         opacity: 1,
       };
@@ -1887,7 +1974,7 @@ function attachToolHandlers(wrap, svg, pageIdx) {
         type: "pen",
         points: [[p.x, p.y]],
         color: state.toolColor,
-        width: state.toolSize / VIEW_SCALE,
+        width: state.toolSize,
         opacity: 1,
       };
       drawingEl = document.createElementNS(SVG_NS, "polyline");
@@ -2000,7 +2087,9 @@ function openTextInput(wrap, evt, pageIdx, pdfPoint) {
   // is focused would delete the previously confirmed annotation.
   if (state.selected) deselectAnnotation();
 
-  const fontSizePdf = state.toolSize / VIEW_SCALE;
+  // tool-size is interpreted directly as PDF points (zoom-independent), so
+  // a value chosen at any zoom produces the same saved-PDF appearance.
+  const fontSizePdf = state.toolSize;
   const widthPdf = TEXT_DEFAULT_WIDTH_PT;
   openTextEditor(wrap, pageIdx, {
     xPdf: pdfPoint.x,
@@ -3030,6 +3119,32 @@ function renderSelectionChrome(svg, pageIdx, idx) {
       ["sw", x,         y + h],
       ["w",  x,         y + h / 2],
     ];
+  } else if (ann.type === "strikethrough") {
+    // Strikethrough handles:
+    //   p1 / p2 — drag an endpoint to reshape the line
+    //   pm      — stretch length about midpoint (keeps angle)
+    //   pg      — adjust the GAP between the two parallel lines, sitting
+    //             perpendicular to the line direction so larger fonts can
+    //             wear a wider double-strike. Distance from the midpoint
+    //             encodes (gap/2 + a small offset) so the user can grab it.
+    const mx = (ann.x1 + ann.x2) / 2;
+    const my = (ann.y1 + ann.y2) / 2;
+    const dx = ann.x2 - ann.x1;
+    const dy = ann.y2 - ann.y1;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    // Perpendicular unit vector (normal to the line direction).
+    const nx = -dy / len;
+    const ny = dx / len;
+    const halfGap = (ann.gap ?? 2.5) / 2;
+    // Position the gap handle a bit further than half-gap so the user has
+    // grabbing room even when the gap is currently 0.
+    const handleOffset = Math.max(halfGap + 6 / VIEW_SCALE, 8 / VIEW_SCALE);
+    positions = [
+      ["p1", ann.x1, ann.y1],
+      ["p2", ann.x2, ann.y2],
+      ["pm", mx,     my],
+      ["pg", mx + nx * handleOffset, my + ny * handleOffset],
+    ];
   }
   if (positions) {
     const handleSize = 9 / VIEW_SCALE;
@@ -3115,15 +3230,60 @@ function attachResizeHandler(handleEl, svg, pageIdx, idx, dir) {
     downEvt.preventDefault();
     downEvt.stopPropagation();
     const ann = state.annotations[pageIdx][idx];
-    if (ann.type !== "highlight" && ann.type !== "frame" && ann.type !== "text") return;
+    if (ann.type !== "highlight" && ann.type !== "frame"
+        && ann.type !== "text" && ann.type !== "strikethrough") return;
     const startPdf = pointToPdf(svg, downEvt);
-    const orig = { x: ann.x, y: ann.y, w: ann.w, h: ann.h };
+    const orig = ann.type === "strikethrough"
+      ? { x1: ann.x1, y1: ann.y1, x2: ann.x2, y2: ann.y2, gap: ann.gap ?? 2.5 }
+      : { x: ann.x, y: ann.y, w: ann.w, h: ann.h };
     const MIN = 5;
 
     const onMove = (e) => {
       const cur = pointToPdf(svg, e);
       const dx = cur.x - startPdf.x;
       const dy = cur.y - startPdf.y;
+      if (ann.type === "strikethrough") {
+        // p1 / p2: drag respective endpoint freely.
+        // pm: scale the line length about its midpoint, preserving angle.
+        if (dir === "p1") {
+          ann.x1 = orig.x1 + dx;
+          ann.y1 = orig.y1 + dy;
+        } else if (dir === "p2") {
+          ann.x2 = orig.x2 + dx;
+          ann.y2 = orig.y2 + dy;
+        } else if (dir === "pm") {
+          const ox = (orig.x1 + orig.x2) / 2;
+          const oy = (orig.y1 + orig.y2) / 2;
+          const vx = orig.x2 - orig.x1;
+          const vy = orig.y2 - orig.y1;
+          const len = Math.sqrt(vx * vx + vy * vy) || 1;
+          // Project drag onto the line direction; that signed length scales
+          // the segment about its midpoint (so dragging "outward" extends).
+          const tx = vx / len, ty = vy / len;
+          const proj = dx * tx + dy * ty;          // PDF points along axis
+          const halfLen = Math.max(MIN, len / 2 + proj);
+          ann.x1 = ox - tx * halfLen;
+          ann.y1 = oy - ty * halfLen;
+          ann.x2 = ox + tx * halfLen;
+          ann.y2 = oy + ty * halfLen;
+        } else if (dir === "pg") {
+          // Drag perpendicular to the line to widen / narrow the gap
+          // between the two parallel strikethrough lines. Project the drag
+          // vector onto the line's normal so motion along the line is
+          // ignored and motion perpendicular widens.
+          const vx = orig.x2 - orig.x1;
+          const vy = orig.y2 - orig.y1;
+          const len = Math.sqrt(vx * vx + vy * vy) || 1;
+          const nx = -vy / len, ny = vx / len;
+          const projN = dx * nx + dy * ny;     // signed perpendicular shift
+          // Doubled because gap describes the distance between the two lines
+          // and the handle sits on one side of the midpoint at gap/2.
+          ann.gap = Math.max(0, orig.gap + projN * 2);
+          updatePropertyPanel();
+        }
+        drawAnnotationsForPage(pageIdx);
+        return;
+      }
       if (ann.type === "text") {
         // Text only resizes width — height follows the wrapped content.
         let nx = orig.x, nw = orig.w;
@@ -3242,6 +3402,7 @@ function updatePropertyPanel() {
   // Show/hide rows depending on annotation type.
   const fontRow = document.getElementById("row-fontsize");
   const strokeRow = document.getElementById("row-stroke");
+  const gapRow = document.getElementById("row-gap");
   const wRow = document.getElementById("row-w");
   const hRow = document.getElementById("row-h");
 
@@ -3249,13 +3410,16 @@ function updatePropertyPanel() {
   strokeRow.style.display =
     (ann.type === "frame" || ann.type === "pen" || ann.type === "strikethrough")
       ? "flex" : "none";
+  gapRow.style.display = ann.type === "strikethrough" ? "flex" : "none";
   wRow.style.display =
     (ann.type === "highlight" || ann.type === "frame" || ann.type === "text")
       ? "flex" : "none";
   hRow.style.display = (ann.type === "highlight" || ann.type === "frame") ? "flex" : "none";
 
   if (ann.type === "text") {
-    document.getElementById("prop-fontsize").value = Math.round(ann.fontSize * VIEW_SCALE);
+    // ann.fontSize is in PDF points; show that value directly so editing is
+    // zoom-independent and round-trips exactly.
+    document.getElementById("prop-fontsize").value = Math.round(ann.fontSize);
     document.getElementById("prop-w").value = Math.round(ann.w ?? TEXT_DEFAULT_WIDTH_PT);
   }
   if (ann.type === "frame") {
@@ -3266,6 +3430,7 @@ function updatePropertyPanel() {
   }
   if (ann.type === "strikethrough") {
     document.getElementById("prop-stroke").value = +(ann.strokeWidth).toFixed(1);
+    document.getElementById("prop-gap").value = +((ann.gap ?? 2.5)).toFixed(1);
   }
   if (ann.type === "highlight" || ann.type === "frame") {
     document.getElementById("prop-w").value = Math.round(ann.w);
@@ -3284,11 +3449,14 @@ function applyPropertyPanelEdit(field, value) {
   if (!ann) return;
   switch (field) {
     case "color":    ann.color = value; break;
-    case "fontSize": ann.fontSize = parseFloat(value) / VIEW_SCALE; break;
+    case "fontSize": ann.fontSize = parseFloat(value); break;
     case "stroke":
       if (ann.type === "frame") ann.strokeWidth = parseFloat(value);
       else if (ann.type === "pen") ann.width = parseFloat(value);
       else if (ann.type === "strikethrough") ann.strokeWidth = parseFloat(value);
+      break;
+    case "gap":
+      if (ann.type === "strikethrough") ann.gap = Math.max(0, parseFloat(value));
       break;
     case "w":       ann.w = Math.max(2, parseFloat(value)); break;
     case "h":       ann.h = Math.max(2, parseFloat(value)); break;
@@ -3811,6 +3979,8 @@ document.getElementById("prop-fontsize").addEventListener("input",
   e => applyPropertyPanelEdit("fontSize", e.target.value));
 document.getElementById("prop-stroke").addEventListener("input",
   e => applyPropertyPanelEdit("stroke", e.target.value));
+document.getElementById("prop-gap").addEventListener("input",
+  e => applyPropertyPanelEdit("gap", e.target.value));
 document.getElementById("prop-w").addEventListener("input",
   e => applyPropertyPanelEdit("w", e.target.value));
 document.getElementById("prop-h").addEventListener("input",
@@ -3831,6 +4001,10 @@ document.getElementById("tool-size").addEventListener("input", e => {
     state.toolSizes[state.currentTool] = state.toolSize;
   }
 });
+
+// Page rotation buttons
+btnRotateLeft.addEventListener("click", () => rotatePages(-90));
+btnRotateRight.addEventListener("click", () => rotatePages(90));
 
 // Page number modal
 const pnModal = document.getElementById("pn-modal");

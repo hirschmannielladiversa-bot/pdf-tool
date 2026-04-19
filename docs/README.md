@@ -1,5 +1,7 @@
 # PDFproject
 
+**Version: 1.3.0** (2026-04-19) — 詳細は [CHANGELOG.md](../CHANGELOG.md) 参照
+
 画像からPDFへの変換とPDF操作ツール集。
 
 ## ツール一覧

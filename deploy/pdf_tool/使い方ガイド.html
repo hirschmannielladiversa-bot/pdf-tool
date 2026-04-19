@@ -230,6 +230,7 @@ footer {
   <header>
     <h1>PDF ツール 使い方ガイド</h1>
     <p>お使いのパソコンの中だけで PDF を編集できる、安全なツールです</p>
+    <p style="margin-top:6px;font-size:13px;opacity:0.85">バージョン v1.3.0（2026-04-19）</p>
   </header>
 
   <div class="toc">
@@ -244,6 +245,7 @@ footer {
       <li><a href="#comment">コメント（ページ外の吹き出し）</a></li>
       <li><a href="#edit">注釈を編集する・削除する</a></li>
       <li><a href="#pages">ページの並べ替え・複数選択・削除</a></li>
+      <li><a href="#rotate">ページを 90° 回転する</a></li>
       <li><a href="#save">編集した PDF を保存する</a></li>
       <li><a href="#more">その他の便利機能</a></li>
       <li><a href="#trouble">困ったときは</a></li>
@@ -374,6 +376,27 @@ footer {
     反応します）。</p>
     <p>編集が終わったら、<strong>ページの空白部分をクリック</strong> するか
     <strong>Enter キー</strong> を押すと、選択が解除されて確定状態になります。</p>
+
+    <h3>取り消し線（二重線）の調整方法</h3>
+    <p>取り消し線は <strong>2 本の平行線</strong> で「見え消し」を表現します。
+    選択ツールで取り消し線をクリックすると、専用のフィルハンドルが
+    <strong>3 種類</strong> 表示されます。</p>
+    <ul>
+      <li><strong>青い四角ハンドル（両端）</strong>: 線の <strong>始点・終点</strong>
+      をそれぞれ自由にドラッグできます。長さや角度を変えるのに使います。</li>
+      <li><strong>オレンジのハンドル（中央）</strong>: 中点を中心に線の
+      <strong>長さを伸縮</strong> します。線の方向に沿ってドラッグしてください。</li>
+      <li><strong>緑のハンドル（線の脇）</strong>: 線に垂直方向にドラッグすると、
+      <strong>2 本の線の間隔</strong>（二重線の幅）を広げ／狭めできます。
+      <strong>大きい文字に合わせて二重線を太く見せたいとき</strong> に便利です。</li>
+    </ul>
+    <p>右上のプロパティパネルからも数値で調整できます。「線の太さ」が 1 本分の
+    線の太さ、「<strong>二重線の間隔</strong>」が 2 本の間隔（pt 単位）です。</p>
+    <div class="note">
+      <strong>大きな文字に二重線を引くコツ:</strong> 「線の太さ」を 1.5〜3pt、
+      「二重線の間隔」を 4〜10pt 程度に増やすと、フォントサイズの大きい見出しにも
+      しっかり映える二重取り消し線になります。
+    </div>
   </section>
 
   <section id="pen">
@@ -431,7 +454,7 @@ footer {
     そのコメント本体と、ぶら下がっている返信カードがすべてまとめて削除されます。</p>
 
     <div class="note">
-      <strong>保存時の動作について:</strong> 「ダウンロード」ボタンで PDF を
+      <strong>保存時の動作について:</strong> 「保存・ダウンロード」ボタンで PDF を
       エクスポートすると、コメントのあるページは
       <strong>右側に余白領域が自動的に追加</strong> され、
       コメントと返信が編集画面と同じ位置に焼き込まれます。
@@ -537,19 +560,45 @@ footer {
     </div>
   </section>
 
+  <section id="rotate">
+    <h2><span class="num">10</span> ページを 90° 回転する</h2>
+    <p>ツールバーの <strong>「↺左回転」</strong>「<strong>↻右回転</strong>」
+    ボタンで、ページを 90° ずつ回転できます。スキャンした PDF が横向きで
+    取り込まれてしまった場合などに便利です。</p>
+    <ol class="steps">
+      <li>サムネイル帯で回転したいページを選択します（複数選択も可）。</li>
+      <li><strong>「↺左回転」</strong> または <strong>「↻右回転」</strong>
+      をクリックします。選択中のページがまとめて 90° ずつ回転します。</li>
+    </ol>
+    <div class="note">
+      <strong>サムネイルを選択していない場合は、画面に表示中のページ 1 枚
+      だけ</strong> が回転します。1 ページずつ向きを直したいときは、
+      そのページを画面中央に表示してから回転ボタンを押すのが手早いです。
+    </div>
+    <p>回転は何度でも繰り返せます（4 回押せば元に戻ります）。
+    回転した状態で「保存・ダウンロード」すれば、回転後の向きで PDF が出力されます。</p>
+  </section>
+
   <section id="save">
-    <h2><span class="num">10</span> 編集した PDF を保存する</h2>
-    <p>画面右上の青い <strong>「ダウンロード」</strong> ボタンをクリックすると、
-    編集済みの PDF がお使いのパソコンに保存されます。</p>
+    <h2><span class="num">11</span> 編集した PDF を保存する</h2>
+    <p>画面右上の青い <strong>「保存・ダウンロード」</strong> ボタンを
+    クリックすると、編集済みの PDF がお使いのパソコンに保存されます
+    （ブラウザの「ダウンロード」フォルダーに入ります）。</p>
     <p>保存されるファイル名は、元の PDF に <code>_edited</code>
     を付けたものになります。</p>
     <p style="text-align:center;font-size:15px;">
       例: <code>report.pdf</code> → <code>report_edited.pdf</code>
     </p>
+    <div class="note">
+      <strong>注釈のサイズはズーム率に影響されません。</strong>
+      画面を縮小表示している状態で文字やハイライトを書き込んでも、
+      拡大表示・印刷時に位置やサイズがズレることはありません
+      （フォントサイズ・線の太さは PDF の点数 (pt) で保存されます）。
+    </div>
   </section>
 
   <section id="more">
-    <h2><span class="num">11</span> その他の便利機能</h2>
+    <h2><span class="num">12</span> その他の便利機能</h2>
 
     <h3>画像から PDF を作る</h3>
     <p><strong>「画像→PDF」</strong> ボタンで PNG や JPEG の画像ファイルを
@@ -570,7 +619,7 @@ footer {
   </section>
 
   <section id="trouble">
-    <h2><span class="num">12</span> 困ったときは</h2>
+    <h2><span class="num">13</span> 困ったときは</h2>
 
     <div class="qa">
       <p class="q">テキストを入力したのに、消えてしまった</p>
@@ -634,7 +683,7 @@ footer {
   </section>
 
   <section id="about">
-    <h2><span class="num">13</span> このアプリについて</h2>
+    <h2><span class="num">14</span> このアプリについて</h2>
     <p>このアプリは <strong>「クライアントサイド」</strong>
     という方式で作られています。少し技術的な用語ですが、
     かみくだいて説明すると:</p>
