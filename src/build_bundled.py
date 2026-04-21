@@ -22,6 +22,8 @@ CSP requirements (already set in source pdf_tool.html) stay intact:
 
 import argparse
 import base64
+import html as html_mod
+import re
 import sys
 from pathlib import Path
 
@@ -56,6 +58,137 @@ def inline_script_tag(src_label: str, js_content: str) -> str:
     # Escape </script> sequences inside embedded JS to prevent premature tag close.
     safe = js_content.replace("</script", "<\\/script")
     return f"<script>\n/* inlined from {src_label} */\n{safe}\n</script>"
+
+
+def extract_i18n_dict(source_html: str, section: str) -> dict:
+    """
+    Extract an I18N.<section> dict (ja or en) from the source HTML.
+    Assumes each entry is `'key': 'value',` on its own line inside the block.
+    Values must not contain raw single quotes (verified in source).
+    """
+    # Find the section opener like "    en: {" or "    ja: {"
+    opener = re.search(rf"^\s*{section}:\s*\{{\s*$", source_html, re.MULTILINE)
+    if not opener:
+        print(f"ERROR: could not locate I18N.{section} block", file=sys.stderr)
+        sys.exit(1)
+    # Walk from the opener until the matching closing brace (depth-aware).
+    start = opener.end()
+    depth = 1
+    i = start
+    while i < len(source_html) and depth > 0:
+        c = source_html[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+        i += 1
+    block = source_html[start:i - 1]
+
+    # Not line-anchored: entries may share a line, e.g.
+    # `'tb.save': 'Save & Download', 'tb.lang': 'JP',`
+    entry_re = re.compile(r"'([^']+)':\s*'((?:[^'\\]|\\.)*)'")
+    out = {}
+    for m in entry_re.finditer(block):
+        key, raw = m.group(1), m.group(2)
+        # Unescape the common JS string escapes we actually use.
+        val = (raw.replace(r"\n", "\n")
+                  .replace(r"\t", "\t")
+                  .replace(r"\\", "\\"))
+        out[key] = val
+    return out
+
+
+def prelocalize_en(html: str) -> str:
+    """
+    Rewrite the JP static HTML defaults (text content, title/placeholder
+    attrs, <title>) to their English equivalents so the EN bundle ships
+    with English-pre-rendered HTML (no FOUC). `applyLang()` still runs at
+    load time and keeps runtime switching functional.
+    """
+    en = extract_i18n_dict(html, "en")
+    if not en:
+        print("ERROR: I18N.en dict came back empty", file=sys.stderr)
+        sys.exit(1)
+
+    def attr_escape(s: str) -> str:
+        return html_mod.escape(s, quote=True)
+
+    def text_escape(s: str) -> str:
+        return html_mod.escape(s, quote=False)
+
+    # 1. <title>…</title>
+    title_en = en.get("title.main")
+    if title_en:
+        html = re.sub(
+            r"<title>[^<]*</title>",
+            f"<title>{text_escape(title_en)}</title>",
+            html, count=1,
+        )
+
+    # 2. Elements with data-i18n="KEY" — replace inner text.
+    #    Match: OPEN_TAG ... data-i18n="KEY" ... >INNER</tag>
+    #    We require single-line tags (no nested children) which is true for
+    #    every data-i18n element in the source (all are <button>/<h2>/<p>/<span>).
+    def repl_text(m: "re.Match") -> str:
+        open_tag, key, inner, close_tag = m.group(1), m.group(2), m.group(3), m.group(4)
+        val = en.get(key)
+        if val is None:
+            return m.group(0)
+        return f"{open_tag}{text_escape(val)}{close_tag}"
+
+    # Element types that appear with `data-i18n=` in the source (verified by
+    # grep). All are leaf elements with plain text children only.
+    tags = r"button|h2|h3|h4|p|span|div|a|label|option"
+    html = re.sub(
+        rf"(<(?:{tags})\b[^>]*?data-i18n=\"([\w.]+)\"[^>]*>)"
+        r"([^<]*)"
+        rf"(</(?:{tags})>)",
+        repl_text, html,
+    )
+
+    # 3. data-i18n-title="KEY" paired with title="…" on the same tag.
+    #    Lookbehind `(?<!-i18n-)` prevents matching the `title=` portion
+    #    inside `data-i18n-title="…"` itself.
+    def repl_title(m: "re.Match") -> str:
+        full = m.group(0)
+        key_m = re.search(r'data-i18n-title="([\w.]+)"', full)
+        if not key_m:
+            return full
+        val = en.get(key_m.group(1))
+        if val is None:
+            return full
+        return re.sub(
+            r'(?<!-i18n-)title="[^"]*"',
+            f'title="{attr_escape(val)}"',
+            full, count=1,
+        )
+
+    html = re.sub(
+        r"<[a-z][^>]*?data-i18n-title=\"[\w.]+\"[^>]*>",
+        repl_title, html,
+    )
+
+    # 4. data-i18n-placeholder="KEY" paired with placeholder="…".
+    def repl_ph(m: "re.Match") -> str:
+        full = m.group(0)
+        key_m = re.search(r'data-i18n-placeholder="([\w.]+)"', full)
+        if not key_m:
+            return full
+        val = en.get(key_m.group(1))
+        if val is None:
+            return full
+        return re.sub(
+            r'(?<!-i18n-)placeholder="[^"]*"',
+            f'placeholder="{attr_escape(val)}"',
+            full, count=1,
+        )
+
+    html = re.sub(
+        r"<[a-z][^>]*?data-i18n-placeholder=\"[\w.]+\"[^>]*>",
+        repl_ph, html,
+    )
+
+    return html
 
 
 def build(lang: str = "ja") -> None:
@@ -131,6 +264,10 @@ def build(lang: str = "ja") -> None:
             '<html lang="en" data-default-lang="en">',
             1,
         )
+        # Pre-localize static HTML text / attrs so EN users never see a
+        # flash of Japanese before initLang() runs.
+        html = prelocalize_en(html)
+        print("  pre-localized static HTML (title / data-i18n text / titles / placeholders)")
 
     out_path = OUT_HTML_BY_LANG[lang]
     out_path.write_text(html, encoding="utf-8")

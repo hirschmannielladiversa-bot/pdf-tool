@@ -791,8 +791,8 @@ html, body {
 
     <span class="tb-sep"></span>
     <select class="tb-select" id="font-select" data-i18n-title="tb.title.fontSelect" title="埋め込みフォントを選択">
-      <option value="0">ゴシック体 (Sawarabi Gothic)</option>
-      <option value="_load">カスタムフォントを読み込む…</option>
+      <option value="0" data-i18n="font.gothic">ゴシック体 (Sawarabi Gothic)</option>
+      <option value="_load" data-i18n="font.loadCustom">カスタムフォントを読み込む…</option>
     </select>
     <button class="tb-btn" id="btn-pagenum" data-i18n="tb.pagenum" disabled>ページ番号</button>
     <button class="tb-btn" id="btn-clear" data-i18n="tb.clear" disabled>クリア</button>
@@ -806,7 +806,7 @@ html, body {
     <span class="tb-sep"></span>
     <button class="tb-btn primary" id="btn-save" disabled data-i18n="tb.save" data-i18n-title="tb.title.save" title="編集内容を埋め込んだ PDF をダウンロード">保存・ダウンロード</button>
     <button class="tb-btn" id="btn-lang" title="Switch language / 言語切替">EN</button>
-    <span class="tb-info" id="info">PDFが読み込まれていません</span>
+    <span class="tb-info" id="info" data-i18n="msg.noPdf">PDFが読み込まれていません</span>
   </div>
 
   <div id="viewer">
@@ -999,7 +999,12 @@ const I18N = {
     'msg.deletedPages': '{n} ページを削除しました',
     'msg.zoom': 'ズーム: {pct}% (表示倍率 {scale}×)',
     'msg.fontLoadFail': 'フォントファイルの読み込みに失敗しました: {err}',
+    'msg.clearPdf': '現在の PDF をすべて破棄して最初からやり直しますか？',
     'err.fontNotSelected': 'フォントが選択されていません',
+    'err.fontTooSmall': 'フォントファイルが小さすぎます',
+    'err.fontEmpty': '{name} のデータが空です',
+    'err.allFontUrlsFailed': 'すべてのフォントURL取得に失敗:\n{errors}',
+    'err.fontkitNotLoaded': 'fontkit がロードされていません',
     'msg.noRotatePage': '回転するページがありません',
     'msg.rotateOne': 'ページ {n} を{dir}回転',
     'msg.rotateMulti': '{n} ページを{dir}回転',
@@ -1088,7 +1093,12 @@ const I18N = {
     'msg.deletedPages': '{n} page(s) deleted',
     'msg.zoom': 'Zoom: {pct}% (scale {scale}×)',
     'msg.fontLoadFail': 'Failed to load font: {err}',
+    'msg.clearPdf': 'Discard the current PDF and start over?',
     'err.fontNotSelected': 'No font selected',
+    'err.fontTooSmall': 'Font file is too small',
+    'err.fontEmpty': '{name}: font data is empty',
+    'err.allFontUrlsFailed': 'All font URL fetches failed:\n{errors}',
+    'err.fontkitNotLoaded': 'fontkit is not loaded',
     'msg.noRotatePage': 'No pages to rotate',
     'msg.rotateOne': 'Page {n} rotated {dir}',
     'msg.rotateMulti': '{n} page(s) rotated {dir}',
@@ -1178,7 +1188,7 @@ async function loadJpFontBytes() {
     return entry.bytes;
   }
   if (entry.source !== "bundled") {
-    throw new Error(`${entry.name} のデータが空です`);
+    throw new Error(t('err.fontEmpty', {name: entry.name}));
   }
   // Bundled font: fetch from lib/ (or data URL in the bundled build).
   if (jpFontFetchPromise) return jpFontFetchPromise;
@@ -1191,7 +1201,7 @@ async function loadJpFontBytes() {
         if (!res.ok) { errors.push(`${url} → HTTP ${res.status}`); continue; }
         const buf = await res.arrayBuffer();
         if (buf.byteLength < 1024) {
-          errors.push(`${url} → 不正なサイズ (${buf.byteLength}B)`);
+          errors.push(`${url} → invalid size (${buf.byteLength}B)`);
           continue;
         }
         const bytes = new Uint8Array(buf);
@@ -1204,7 +1214,7 @@ async function loadJpFontBytes() {
       }
     }
     jpFontFetchPromise = null;
-    throw new Error("すべてのフォントURL取得に失敗:\n" + errors.join("\n"));
+    throw new Error(t('err.allFontUrlsFailed', {errors: errors.join('\n')}));
   })();
   return jpFontFetchPromise;
 }
@@ -1214,7 +1224,7 @@ async function loadJpFontBytes() {
  */
 async function setJpFontFromFile(file) {
   const buf = await file.arrayBuffer();
-  if (buf.byteLength < 1024) throw new Error("ファイルが小さすぎます");
+  if (buf.byteLength < 1024) throw new Error(t('err.fontTooSmall'));
   const bytes = new Uint8Array(buf);
   // If a font with this name is already registered, overwrite it.
   let idx = fontRegistry.findIndex(e => e.name === file.name);
@@ -1263,7 +1273,7 @@ async function embedJpFont(doc) {
   const bytes = await loadJpFontBytes();
   // window.fontkit is provided by the @pdf-lib/fontkit UMD bundle.
   const fk = window.fontkit || (typeof fontkit !== "undefined" ? fontkit : null);
-  if (!fk) throw new Error("fontkit がロードされていません");
+  if (!fk) throw new Error(t('err.fontkitNotLoaded'));
   doc.registerFontkit(fk);
   return await doc.embedFont(bytes, { subset: false });
 }
@@ -3718,7 +3728,7 @@ async function addPageNumbers({ position, format, fontSize, startNumber, skipPag
   try {
     font = await embedJpFont(state.pdfDoc);
   } catch (err) {
-    console.warn("日本語フォント取得失敗、Helveticaを使用:", err);
+    console.warn("JP font fetch failed, falling back to Helvetica:", err);
     toast(t('msg.fontFallback'), 3500);
     font = await state.pdfDoc.embedFont(StandardFonts.Helvetica);
   }
@@ -3759,7 +3769,7 @@ async function burnAnnotationsIntoPdf(doc) {
     font = await embedJpFont(doc);
     fontIsJp = true;
   } catch (err) {
-    console.warn("日本語フォント読み込み失敗、Helveticaにフォールバック:", err);
+    console.warn("JP font load failed, falling back to Helvetica:", err);
     toast(t('msg.fontFallbackExportOnly'), 4000);
     font = await doc.embedFont(StandardFonts.Helvetica);
   }
@@ -3943,7 +3953,7 @@ async function burnAnnotationsIntoPdf(doc) {
                     opacity: 1,
                   });
                 } catch (e) {
-                  console.warn("コメント本文の埋め込みに失敗:", line, e);
+                  console.warn("failed to embed comment body:", line, e);
                   skipped++;
                 }
               }
@@ -4035,7 +4045,7 @@ async function burnAnnotationsIntoPdf(doc) {
                       opacity: 1,
                     });
                   } catch (e) {
-                    console.warn("返信本文の埋め込みに失敗:", line, e);
+                    console.warn("failed to embed reply body:", line, e);
                     skipped++;
                   }
                 }
@@ -4069,7 +4079,7 @@ async function burnAnnotationsIntoPdf(doc) {
               opacity,
             });
           } catch (e) {
-            console.warn("テキスト注釈の埋め込みに失敗:", line, e);
+            console.warn("failed to embed text annotation:", line, e);
             skipped++;
           }
         });
