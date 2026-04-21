@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-build_packages.py — Produce OS-specific distribution zips.
+build_packages.py — Produce OS-specific distribution zips (JP and EN).
 
-1. Runs build_bundled.py first so pdf_tool_bundled.html is up to date.
-2. Regenerates SHA256SUMS.txt for the files inside deploy/pdf_tool.
-3. Zips two variants into deploy/packages/:
-     - PDF_Tool_Mac.zip     (full set, includes 本体：ダブルクリックで作動.html)
-     - PDF_Tool_Windows.zip (ASCII-only names; NO full-width colon file —
-                             see WINDOWS_DEBUG_NOTES.md for background)
+1. Runs build_bundled.py twice (--lang ja and --lang en) to produce:
+     - pdf_tool_bundled.html       (Japanese-default)
+     - pdf_tool_bundled_en.html    (English-default)
+2. Builds four zip packages in deploy/packages/:
+     - PDF_Tool_Mac_JP.zip     (entry: 本体：ダブルクリックで作動.html, guide: 使い方ガイド.html)
+     - PDF_Tool_Mac_EN.zip     (entry: PDF_Tool.html,                  guide: usage_guide.html)
+     - PDF_Tool_Windows_JP.zip (entry: pdf_tool_bundled.html,          guide: 使い方ガイド.html)
+     - PDF_Tool_Windows_EN.zip (entry: pdf_tool_bundled.html,          guide: usage_guide.html)
+   Each zip embeds its own SHA256SUMS.txt.
 """
 
 import hashlib
@@ -23,20 +26,31 @@ LIB_DIR = DEPLOY_DIR / "lib"
 PACKAGES_DIR = ROOT / "deploy" / "packages"
 BUILD_BUNDLED_SCRIPT = ROOT / "src" / "build_bundled.py"
 
-# The Japanese-named copy that Mac users see in Finder as "本体：ダブルクリックで作動.html".
-# This file causes opening failures on Windows due to U+FF1A + NFD/NFC mismatch,
-# so we only include it in the Mac package.
-MAC_FRIENDLY_FILENAME = "本体：ダブルクリックで作動.html"
+# The Japanese-named copy that Mac JP users double-click in Finder.
+# Excluded from Windows packages due to U+FF1A + NFD/NFC issues on Windows.
+MAC_FRIENDLY_FILENAME_JP = "本体：ダブルクリックで作動.html"
+# ASCII entry point for Mac EN package.
+MAC_FRIENDLY_FILENAME_EN = "PDF_Tool.html"
 
-# Files common to both packages (paths are relative to DEPLOY_DIR)
-COMMON_FILES = [
-    "pdf_tool.html",                  # lib-referencing form
-    "pdf_tool_bundled.html",          # single-file bundle (ASCII name)
-    "使い方ガイド.html",              # usage guide (kept in both — normal Japanese chars)
+# Bundled single-file HTMLs per language (on disk in DEPLOY_DIR).
+BUNDLED_FILES = {
+    "ja": DEPLOY_DIR / "pdf_tool_bundled.html",
+    "en": DEPLOY_DIR / "pdf_tool_bundled_en.html",
+}
+
+# Usage guide per language.
+GUIDE_FILES = {
+    "ja": "使い方ガイド.html",
+    "en": "usage_guide.html",
+}
+
+# Files common to all four packages (no guide — that's lang-specific).
+COMMON_FILES_BASE = [
+    "pdf_tool.html",    # lib-referencing form (advanced users)
     "LICENSE.txt",
 ]
 
-# lib/ assets (shared)
+# lib/ assets (shared across all packages).
 LIB_FILES = [
     "pdf.min.js",
     "pdf-lib.min.js",
@@ -63,7 +77,7 @@ WINDOWS_README_TXT = """PDF Tool — Windows 版 (オフライン単一ファイ
   pdf_tool.html + lib/ フォルダ をセットで配置して開く形でも動きます。
 
 ◆ Mac 版との関係
-  Mac 版 (PDF_Tool_Mac.zip) と Windows 版は 中身 (HTML / JS / フォント)
+  Mac 版 (PDF_Tool_Mac_JP.zip) と Windows 版は 中身 (HTML / JS / フォント)
   が同一で、機能も操作方法も完全に同じです。違いはエントリ用のファイル名
   だけで、Mac 版には日本語ファイル名 "本体：ダブルクリックで作動.html"
   が含まれ、Windows 版には pdf_tool_bundled.html だけが含まれます。
@@ -81,6 +95,7 @@ WINDOWS_README_TXT = """PDF Tool — Windows 版 (オフライン単一ファイ
   - ズーム: ツールバーの − / 100% / ＋ ボタンで表示倍率を変更 (40% 〜 400%)
   - フォント切替: プルダウンから埋め込みフォントを選択 (初期値: Sawarabi Gothic)
     カスタムフォント (.ttf / .otf) を読み込んで追加することも可能
+  - JP / EN 切替: ツールバーの JP / EN ボタンで表示言語をいつでも切り替え可能
 
 ◆ 選択の挙動 (注意)
   - テキスト注釈: 選択するとプロパティパネルが出っぱなしになります。
@@ -96,18 +111,71 @@ WINDOWS_README_TXT = """PDF Tool — Windows 版 (オフライン単一ファイ
   これは Windows で開けなくなる既知の問題を避けるためです。
 """
 
+WINDOWS_README_TXT_EN = """PDF Tool — Windows version (offline single-file)
+
+◆ Recommended: double-click pdf_tool_bundled.html
+  Opens in your browser and lets you edit PDFs immediately.
+  No internet connection required (all processing stays in your browser).
+
+◆ If the file won't open or shows a black screen
+  1. Copy this entire folder to a local Windows drive (e.g. Desktop) and then
+     open pdf_tool_bundled.html. Opening directly from an external SSD/USB
+     can cause launch failures on some systems.
+  2. If that still doesn't work, open Edge or Chrome first, then drag and drop
+     pdf_tool_bundled.html onto the browser window.
+  3. Press F12 to open the browser developer tools and check the console for
+     any error messages.
+
+◆ Alternative: library-reference variant
+  pdf_tool.html + lib/ folder can also be used by placing them together and
+  opening pdf_tool.html in a browser.
+
+◆ Relationship to the Mac version
+  The Mac version (PDF_Tool_Mac_EN.zip) and this Windows version are
+  identical in content (HTML / JS / fonts) and functionality. The only
+  difference is the entry filename:
+    Mac     -> PDF_Tool.html
+    Windows -> pdf_tool_bundled.html
+  The usage guide (usage_guide.html) is shared between both OS versions.
+
+◆ Main features
+  - Text / Highlight / Frame / Strikethrough / Pen / Eraser annotations
+  - Word-style comments: select the "Comment" tool, click or drag on the page
+    -> a callout appears to the right. Drag to reposition, use the fill handle
+    to resize, A-/A+ to change font size, "Reply" to add reply sub-cards
+  - Insert page numbers, convert images to PDF, merge PDFs
+  - Multi-page select: Shift+click / Ctrl+click thumbnails to select multiple
+    pages; drag to reorder, Shift+<-/-> to extend selection, <-/-> (no Shift)
+    to move selected pages one step at a time
+  - Zoom: - / 100% / + buttons in the toolbar (40% - 400%)
+  - Font switching: choose from the dropdown (default: Sawarabi Gothic);
+    load custom .ttf/.otf fonts via "Load custom font..."
+  - JP / EN toggle: switch the interface language at any time with the
+    JP / EN button in the toolbar
+
+◆ Selection behavior (note)
+  - Text annotations: selecting shows the properties panel persistently.
+    Close it with Escape, by switching tools, or by pressing Delete.
+  - Frame / Highlight: selecting shows resize handles.
+    Click a blank page area or press Enter to confirm (handles disappear).
+    You can click anywhere inside the frame area to select it -- not only
+    on the border line itself.
+"""
+
 
 def run_build_bundled():
-    print("[1/4] running build_bundled.py …")
-    r = subprocess.run(
-        [sys.executable, str(BUILD_BUNDLED_SCRIPT)],
-        cwd=str(ROOT), capture_output=True, text=True,
-    )
-    if r.returncode != 0:
-        print(r.stdout)
-        print(r.stderr, file=sys.stderr)
-        sys.exit("build_bundled.py failed")
-    print(r.stdout.strip())
+    print("[1/5] running build_bundled.py (ja + en) …")
+    for lang in ["ja", "en"]:
+        r = subprocess.run(
+            [sys.executable, str(BUILD_BUNDLED_SCRIPT), "--lang", lang],
+            cwd=str(ROOT), capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            print(r.stdout)
+            print(r.stderr, file=sys.stderr)
+            sys.exit(f"build_bundled.py --lang {lang} failed")
+        last_line = r.stdout.strip().split("\n")[-1] if r.stdout.strip() else ""
+        print(f"  [{lang}] {last_line}")
 
 
 def sha256_file(p: Path) -> str:
@@ -118,90 +186,113 @@ def sha256_file(p: Path) -> str:
     return h.hexdigest()
 
 
-def regenerate_sha256sums():
-    print("[2/4] regenerating SHA256SUMS.txt …")
-    lines = []
-    for rel in COMMON_FILES + [f"lib/{n}" for n in LIB_FILES]:
-        p = DEPLOY_DIR / rel
-        if not p.exists():
-            print(f"  WARNING: missing {rel}")
-            continue
-        lines.append(f"{sha256_file(p)}  {rel}")
-    # Include the Japanese-named file too if it exists.
-    jp_file = DEPLOY_DIR / MAC_FRIENDLY_FILENAME
-    if jp_file.exists():
-        lines.append(f"{sha256_file(jp_file)}  {MAC_FRIENDLY_FILENAME}")
-    sums = "\n".join(lines) + "\n"
-    (DEPLOY_DIR / "SHA256SUMS.txt").write_text(sums, encoding="utf-8")
-    print(f"  {len(lines)} files hashed")
+def zip_with_sha256(zip_path: Path, entries):
+    """
+    entries: list of (disk_path, arcname_in_zip)
+    Computes per-zip SHA256SUMS.txt and embeds it as pdf_tool/SHA256SUMS.txt.
+    """
+    sha_lines = []
+    for disk, arc in entries:
+        if disk.exists():
+            rel = arc.split("/", 1)[-1]  # strip leading 'pdf_tool/' folder
+            sha_lines.append(f"{sha256_file(disk)}  {rel}")
 
+    sha_tmp = zip_path.parent / "_SHA256SUMS_tmp.txt"
+    sha_tmp.write_text("\n".join(sha_lines) + "\n", encoding="utf-8")
 
-def refresh_mac_friendly_copy():
-    """Keep 本体：ダブルクリックで作動.html in sync with pdf_tool_bundled.html."""
-    src = DEPLOY_DIR / "pdf_tool_bundled.html"
-    dst = DEPLOY_DIR / MAC_FRIENDLY_FILENAME
-    shutil.copyfile(src, dst)
-    print(f"  refreshed mac-friendly copy: {MAC_FRIENDLY_FILENAME}")
-
-
-def zip_files(zip_path: Path, entries):
-    """entries: list of (disk_path, arcname)"""
     zip_path.parent.mkdir(parents=True, exist_ok=True)
     if zip_path.exists():
         zip_path.unlink()
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-        for disk, arc in entries:
-            if not disk.exists():
-                print(f"  SKIP missing: {disk}")
-                continue
-            zf.write(disk, arc)
-    print(f"  → {zip_path.name} ({zip_path.stat().st_size / (1024*1024):.2f} MB)")
-
-
-def build_mac_zip():
-    print("[3/4] building Mac zip …")
-    entries = []
-    # Common files
-    for name in COMMON_FILES + ["SHA256SUMS.txt"]:
-        entries.append((DEPLOY_DIR / name, f"pdf_tool/{name}"))
-    # Japanese-named "本体" file — Mac-only
-    jp = DEPLOY_DIR / MAC_FRIENDLY_FILENAME
-    entries.append((jp, f"pdf_tool/{MAC_FRIENDLY_FILENAME}"))
-    # lib/
-    for name in LIB_FILES:
-        entries.append((LIB_DIR / name, f"pdf_tool/lib/{name}"))
-    zip_files(PACKAGES_DIR / "PDF_Tool_Mac.zip", entries)
-
-
-def build_windows_zip():
-    print("[4/4] building Windows zip …")
-    entries = []
-    for name in COMMON_FILES + ["SHA256SUMS.txt"]:
-        entries.append((DEPLOY_DIR / name, f"pdf_tool/{name}"))
-    # NOTE: intentionally NOT including 本体：ダブルクリックで作動.html
-    for name in LIB_FILES:
-        entries.append((LIB_DIR / name, f"pdf_tool/lib/{name}"))
-    # Add Windows-specific README (generated on the fly, not persisted on disk).
-    readme_path = PACKAGES_DIR / "_README_Windows_tmp.txt"
-    PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
-    readme_path.write_text(WINDOWS_README_TXT, encoding="utf-8")
-    entries.append((readme_path, "pdf_tool/README_Windows.txt"))
     try:
-        zip_files(PACKAGES_DIR / "PDF_Tool_Windows.zip", entries)
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+            for disk, arc in entries:
+                if not disk.exists():
+                    print(f"  SKIP missing: {disk}")
+                    continue
+                zf.write(disk, arc)
+            zf.write(sha_tmp, "pdf_tool/SHA256SUMS.txt")
     finally:
-        if readme_path.exists():
-            readme_path.unlink()
+        if sha_tmp.exists():
+            sha_tmp.unlink()
+
+    print(f"  → {zip_path.name} ({zip_path.stat().st_size / (1024 * 1024):.2f} MB)")
+
+
+def _base_entries(lang: str):
+    """Returns (disk_path, arcname) entries shared by Mac and Windows packages."""
+    entries = []
+    # Common non-guide files
+    for name in COMMON_FILES_BASE:
+        entries.append((DEPLOY_DIR / name, f"pdf_tool/{name}"))
+    # Language-specific guide
+    guide = GUIDE_FILES[lang]
+    entries.append((DEPLOY_DIR / guide, f"pdf_tool/{guide}"))
+    # lib/ assets
+    for name in LIB_FILES:
+        entries.append((LIB_DIR / name, f"pdf_tool/lib/{name}"))
+    return entries
+
+
+def build_mac_zip(lang: str):
+    label = "JP" if lang == "ja" else "EN"
+    step = 2 if lang == "ja" else 3
+    print(f"[{step}/5] building Mac {label} zip …")
+
+    bundled = BUNDLED_FILES[lang]
+    entries = _base_entries(lang)
+    # Bundled file as pdf_tool_bundled.html (ASCII, always present)
+    entries.append((bundled, "pdf_tool/pdf_tool_bundled.html"))
+    # OS-friendly named entry
+    if lang == "ja":
+        entries.append((bundled, f"pdf_tool/{MAC_FRIENDLY_FILENAME_JP}"))
+    else:
+        entries.append((bundled, f"pdf_tool/{MAC_FRIENDLY_FILENAME_EN}"))
+
+    zip_name = f"PDF_Tool_Mac_{label}.zip"
+    zip_with_sha256(PACKAGES_DIR / zip_name, entries)
+
+
+def build_windows_zip(lang: str):
+    label = "JP" if lang == "ja" else "EN"
+    step = 4 if lang == "ja" else 5
+    print(f"[{step}/5] building Windows {label} zip …")
+
+    bundled = BUNDLED_FILES[lang]
+    readme_txt = WINDOWS_README_TXT if lang == "ja" else WINDOWS_README_TXT_EN
+
+    readme_tmp = PACKAGES_DIR / "_README_Windows_tmp.txt"
+    PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
+    readme_tmp.write_text(readme_txt, encoding="utf-8")
+
+    entries = _base_entries(lang)
+    entries.append((bundled, "pdf_tool/pdf_tool_bundled.html"))
+    # NOTE: intentionally NOT including the JP Mac-friendly filename
+    entries.append((readme_tmp, "pdf_tool/README_Windows.txt"))
+
+    zip_name = f"PDF_Tool_Windows_{label}.zip"
+    try:
+        zip_with_sha256(PACKAGES_DIR / zip_name, entries)
+    finally:
+        if readme_tmp.exists():
+            readme_tmp.unlink()
 
 
 def main():
     run_build_bundled()
-    refresh_mac_friendly_copy()
-    regenerate_sha256sums()
-    build_mac_zip()
-    build_windows_zip()
+    build_mac_zip("ja")
+    build_mac_zip("en")
+    build_windows_zip("ja")
+    build_windows_zip("en")
     print("\n✓ all done.")
-    print(f"  Mac:     {PACKAGES_DIR / 'PDF_Tool_Mac.zip'}")
-    print(f"  Windows: {PACKAGES_DIR / 'PDF_Tool_Windows.zip'}")
+    for name in [
+        "PDF_Tool_Mac_JP.zip",
+        "PDF_Tool_Mac_EN.zip",
+        "PDF_Tool_Windows_JP.zip",
+        "PDF_Tool_Windows_EN.zip",
+    ]:
+        p = PACKAGES_DIR / name
+        size = f"{p.stat().st_size / (1024*1024):.2f} MB" if p.exists() else "NOT FOUND"
+        print(f"  {name}: {size}")
 
 
 if __name__ == "__main__":

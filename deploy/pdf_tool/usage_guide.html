@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Tool User Guide</title>
+<style>
+:root {
+  --bg: #fafbfc;
+  --card: #ffffff;
+  --text: #1f2328;
+  --muted: #656d76;
+  --accent: #4a9eff;
+  --accent-dark: #0969da;
+  --warm: #fff8e1;
+  --warm-border: #f9c74f;
+  --code-bg: #f6f8fa;
+  --border: #d0d7de;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.85;
+  font-size: 16px;
+  margin: 0;
+}
+.container {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+header {
+  background: linear-gradient(135deg, #4a9eff, #6dbcff);
+  color: #fff;
+  padding: 40px 32px;
+  border-radius: 14px;
+  margin-bottom: 32px;
+  box-shadow: 0 6px 20px rgba(74, 158, 255, 0.25);
+}
+header h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+  letter-spacing: 0.5px;
+}
+header p {
+  margin: 0;
+  font-size: 16px;
+  opacity: 0.95;
+}
+section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px 28px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+section h2 {
+  margin: 0 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 3px solid var(--accent);
+  color: var(--accent-dark);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+section h3 {
+  margin: 18px 0 8px;
+  font-size: 17px;
+  color: var(--text);
+}
+ol, ul {
+  margin: 8px 0 12px;
+  padding-left: 26px;
+}
+li { margin: 4px 0; }
+p { margin: 10px 0; }
+strong { color: var(--accent-dark); }
+code {
+  background: var(--code-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: #d6336c;
+}
+.tool-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+.tool-list li {
+  background: var(--code-bg);
+  border-left: 4px solid var(--accent);
+  padding: 10px 16px;
+  margin: 6px 0;
+  border-radius: 6px;
+}
+.tool-list .tool-name {
+  display: inline-block;
+  min-width: 110px;
+  font-weight: 700;
+  color: var(--accent-dark);
+}
+.note {
+  background: var(--warm);
+  border-left: 4px solid var(--warm-border);
+  padding: 12px 18px;
+  border-radius: 6px;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.note::before {
+  content: "💡 ";
+}
+.qa {
+  background: var(--code-bg);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin: 10px 0;
+}
+.qa .q {
+  font-weight: 700;
+  color: var(--accent-dark);
+  margin: 0 0 4px;
+}
+.qa .q::before {
+  content: "Q. ";
+}
+.qa .a {
+  margin: 0;
+  padding-left: 24px;
+  position: relative;
+}
+.qa .a::before {
+  content: "A.";
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+  color: var(--muted);
+}
+.file-list {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  background: #1e2128;
+  color: #e6e8ec;
+  padding: 16px 20px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.file-list .star { color: #ffd166; }
+.file-list .cmt { color: #9097a3; }
+.steps {
+  counter-reset: step;
+  list-style: none;
+  padding: 0;
+}
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 38px;
+  margin: 12px 0;
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+.toc {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 24px;
+  margin-bottom: 24px;
+}
+.toc h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: var(--muted);
+  border: none;
+}
+.toc ol { margin: 0; padding-left: 22px; }
+.toc a {
+  color: var(--accent-dark);
+  text-decoration: none;
+}
+.toc a:hover { text-decoration: underline; }
+footer {
+  text-align: center;
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.big-emoji {
+  font-size: 22px;
+  margin-right: 6px;
+}
+.lang-switch {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 18px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.lang-switch a {
+  color: var(--accent-dark);
+  text-decoration: none;
+  font-weight: 600;
+}
+.lang-switch a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="lang-switch">
+    🌐 This is the <strong>English</strong> guide. &nbsp;|&nbsp;
+    <a href="使い方ガイド.html">日本語版はこちら</a>
+  </div>
+
+  <header>
+    <h1>PDF Tool User Guide</h1>
+    <p>Edit PDFs entirely within your browser — private, offline, no upload required</p>
+    <p style="margin-top:6px;font-size:13px;opacity:0.85">Version v1.4.0 (2026-04-21)</p>
+  </header>
+
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li><a href="#start">Getting Started — How to Launch</a></li>
+      <li><a href="#open">Opening a PDF</a></li>
+      <li><a href="#tools">Choosing a Tool</a></li>
+      <li><a href="#text">Adding Text</a></li>
+      <li><a href="#shape">Highlight, Frame, and Strikethrough</a></li>
+      <li><a href="#pen">Freehand Drawing</a></li>
+      <li><a href="#comment">Comments (Margin Callouts)</a></li>
+      <li><a href="#edit">Editing and Deleting Annotations</a></li>
+      <li><a href="#pages">Reordering, Multi-selecting, and Deleting Pages</a></li>
+      <li><a href="#rotate">Rotating Pages 90°</a></li>
+      <li><a href="#save">Saving the Edited PDF</a></li>
+      <li><a href="#more">Other Useful Features</a></li>
+      <li><a href="#trouble">Troubleshooting</a></li>
+      <li><a href="#about">About This App</a></li>
+    </ol>
+  </div>
+
+  <section id="start">
+    <h2><span class="num">1</span> Getting Started — How to Launch</h2>
+    <p>Unzip the downloaded ZIP file, then double-click the main file inside.
+    The filename differs depending on your operating system:</p>
+
+    <p style="text-align:center;font-size:15px;font-weight:700;margin-top:14px;">
+      ■ <span style="color:var(--accent-dark)">Mac</span>:<br>
+      <code>PDF_Tool.html</code>
+    </p>
+
+    <p style="text-align:center;font-size:15px;font-weight:700;margin-top:10px;">
+      ■ <span style="color:var(--accent-dark)">Windows</span>:<br>
+      <code>pdf_tool_bundled.html</code>
+    </p>
+
+    <p style="margin-top:14px;">Double-clicking opens the file in your default browser
+    (Chrome, Edge, Safari, Firefox, etc.) and the tool is ready to use immediately.
+    No internet connection is required.</p>
+
+    <div class="note">
+      <strong>The Mac and Windows versions are identical in functionality.</strong>
+      Every feature described in this guide — text, highlight, frame, comments,
+      page reordering, zoom, font switching, etc. — works the same on both operating
+      systems. The only difference is the filename you double-click to open.
+    </div>
+
+    <div class="note">
+      If a dialog asks "Which app to use?", choose
+      <strong>Chrome</strong>, <strong>Edge</strong>, or <strong>Safari</strong>.
+      You do not need to open any other files (e.g., the <code>lib</code> folder).
+      The single main HTML file is fully self-contained.
+    </div>
+
+    <div class="note">
+      <strong>If the file won't open on Windows:</strong> Copy the unzipped folder
+      to your desktop or Documents folder (not an external drive), then
+      double-click <code>pdf_tool_bundled.html</code> again. If that still doesn't
+      work, open Chrome or Edge first, then drag and drop
+      <code>pdf_tool_bundled.html</code> onto the browser window.
+    </div>
+  </section>
+
+  <section id="open">
+    <h2><span class="num">2</span> Opening a PDF</h2>
+    <p>Click the <strong>"Open PDF"</strong> button in the upper-left corner
+    and select the PDF file you want to edit.</p>
+    <p>Alternatively, <strong>drag and drop</strong> a PDF file directly onto
+    the browser window.</p>
+    <p>Once the PDF appears, you are ready to edit.</p>
+  </section>
+
+  <section id="tools">
+    <h2><span class="num">3</span> Choosing a Tool</h2>
+    <p>The buttons along the top of the screen are your tools. Click one to activate it.</p>
+    <ul class="tool-list">
+      <li><span class="tool-name">Select</span> Select, move, resize, or edit annotations</li>
+      <li><span class="tool-name">Text</span> Type text onto the PDF</li>
+      <li><span class="tool-name">Highlight</span> Paint over text like a marker pen</li>
+      <li><span class="tool-name">Frame</span> Draw a rectangular border</li>
+      <li><span class="tool-name">Strikethrough</span> Cross out text with double lines</li>
+      <li><span class="tool-name">Pen</span> Draw freehand lines with your mouse</li>
+      <li><span class="tool-name">Comment</span> Add a margin callout outside the page (see the dedicated section below)</li>
+      <li><span class="tool-name">Eraser</span> Click an annotation to delete it one at a time</li>
+    </ul>
+    <div class="note">
+      To the right of the tool buttons you will find a <strong>color picker</strong>
+      and a <strong>size input</strong> for adjusting the drawing color, stroke width,
+      and font size.
+    </div>
+    <div class="note">
+      <strong>Font selection:</strong> Use the <strong>font dropdown</strong> on the
+      right side of the toolbar to choose the font for text annotations, comments,
+      and page numbers. The default is "Gothic (Sawarabi Gothic)". To use your own
+      font, select <code>Load custom font…</code> at the bottom of the dropdown and
+      pick a <code>.ttf</code> or <code>.otf</code> file. Once loaded, the font stays
+      in the menu and can be switched at any time.
+    </div>
+    <div class="note">
+      <strong>Zoom:</strong> Use the <code>−</code> / <code>100%</code> / <code>+</code>
+      buttons at the far right of the toolbar to adjust the display scale.
+      Click <code>100%</code> to reset to the default size.
+    </div>
+    <div class="note">
+      <strong>Language toggle:</strong> The <strong>JP / EN</strong> button at the
+      rightmost end of the toolbar switches the interface language between Japanese
+      and English. Your preference is saved in the browser and persists across sessions.
+    </div>
+  </section>
+
+  <section id="text">
+    <h2><span class="num">4</span> Adding Text</h2>
+    <ol class="steps">
+      <li>Click the <strong>"Text"</strong> tool to activate it.</li>
+      <li>Click on the PDF where you want to place text.</li>
+      <li>An input box appears — type your text.</li>
+      <li>Press <strong>Enter</strong> to confirm the input.</li>
+      <li>Press Enter once more to finalize the text annotation.</li>
+    </ol>
+    <div class="note">
+      If you are composing with an IME (e.g., typing Japanese), the first Enter key
+      confirms the IME conversion; the second Enter finalizes the annotation.
+      Long text automatically wraps to multiple lines to fit the box width.<br>
+      To re-edit existing text, <strong>double-click</strong> the annotation to
+      enter edit mode again.
+    </div>
+  </section>
+
+  <section id="shape">
+    <h2><span class="num">5</span> Highlight, Frame, and Strikethrough</h2>
+    <ol class="steps">
+      <li>Select <strong>"Highlight"</strong>, <strong>"Frame"</strong>, or
+      <strong>"Strikethrough"</strong>.</li>
+      <li><strong>Drag</strong> (click and hold, then move) over the area on the PDF
+      where you want to place the annotation.</li>
+      <li>Release the mouse button — the annotation is created and immediately selected
+      (handles appear at the corners).</li>
+    </ol>
+    <p>To pick a color in advance, click the color button in the toolbar before drawing.</p>
+    <p>To change color or size after creation, <strong>switch to the Select tool and
+    click the annotation</strong>. Frames and highlights can be clicked
+    <strong>anywhere inside</strong> their bounding area — not just on the border line.</p>
+    <p>When you are done editing, click a <strong>blank area of the page</strong>
+    or press <strong>Enter</strong> to deselect and finalize.</p>
+
+    <h3>Adjusting Strikethrough Lines</h3>
+    <p>The strikethrough annotation uses <strong>two parallel lines</strong> to
+    indicate deletion. When you select a strikethrough, three types of fill handles appear:</p>
+    <ul>
+      <li><strong>Blue square handles (both ends)</strong>: Drag each end individually
+      to reposition the <strong>start or end point</strong> — useful for changing length
+      and angle.</li>
+      <li><strong>Orange handle (center)</strong>: Drag along the line direction to
+      <strong>stretch or shrink</strong> the line symmetrically about its midpoint.</li>
+      <li><strong>Green handle (beside the line)</strong>: Drag perpendicular to the line
+      to widen or narrow the <strong>gap between the two lines</strong> — handy when
+      matching large-font headings.</li>
+    </ul>
+    <p>You can also adjust values numerically in the properties panel (top-right).
+    "Stroke width" sets the thickness of each individual line; <strong>"Double-line gap"</strong>
+    sets the distance between the two lines (in pt).</p>
+    <div class="note">
+      <strong>Tip for large text:</strong> Set "Stroke width" to 1.5–3 pt and
+      "Double-line gap" to 4–10 pt for a bold strikethrough that stands out on
+      large headings.
+    </div>
+  </section>
+
+  <section id="pen">
+    <h2><span class="num">6</span> Freehand Drawing</h2>
+    <ol class="steps">
+      <li>Select the <strong>"Pen"</strong> tool.</li>
+      <li>Drag your mouse across the PDF to draw freely.</li>
+    </ol>
+    <p>Adjust the stroke width using the "Size" field in the toolbar. Color can
+    also be changed with the color button.</p>
+  </section>
+
+  <section id="comment">
+    <h2><span class="num">7</span> Comments (Margin Callouts)</h2>
+    <p>Like the comment feature in Word, you can attach a note
+    <strong>outside the page boundary</strong>, connected to the relevant area
+    by a leader line.</p>
+
+    <ol class="steps">
+      <li>Select <strong>"Comment"</strong> from the toolbar.</li>
+      <li><strong>Drag</strong> over the area on the page you want to annotate
+      (drag to select a region, or just click for a point anchor).</li>
+      <li>When you release the mouse, a dashed border appears around your selection
+      and a <strong>yellow callout box appears to the right of the page</strong>.</li>
+      <li>Click the body area of the callout and type your comment.</li>
+      <li><strong>Drag the title bar</strong> to reposition the callout.</li>
+      <li>Drag the <strong>small square handle at the bottom-right</strong> of the callout
+      to resize it.</li>
+    </ol>
+
+    <h3>Adding Replies</h3>
+    <p>Click the <strong>"Reply"</strong> button in the callout's title bar to add
+    a <strong>child card</strong> below the parent comment. Replies are labeled
+    "↳ Reply 1", "↳ Reply 2", etc., and are visually distinct from the parent.</p>
+    <ul>
+      <li>Click the body area of a reply card to type its text</li>
+      <li>Press "Reply" repeatedly to add as many replies as needed</li>
+      <li>Delete an individual reply with the <strong>×</strong> button at its top-right</li>
+      <li>A vertical line from the parent and horizontal branches to each reply card
+      show the thread structure at a glance</li>
+    </ul>
+
+    <h3>Changing Font Size</h3>
+    <p>Use the <strong>A−</strong> / <strong>A+</strong> buttons in the title bar to
+    adjust the font size of that callout. Each callout can be sized independently;
+    reply cards follow the parent callout's size automatically.</p>
+
+    <h3>Deleting a Comment</h3>
+    <p>Click the <strong>×</strong> at the far-right of the parent callout's title bar
+    to delete the entire comment thread, including all reply cards.</p>
+
+    <div class="note">
+      <strong>How saving works:</strong> When you export the PDF via "Save &amp; Download",
+      pages that have comments automatically get a <strong>right-side margin area added</strong>
+      so the callouts are embedded at the same positions you see on screen.
+      The original page content is never hidden or overlapped.
+    </div>
+    <div class="note">
+      As a side effect, pages with comments will be <strong>wider than the original PDF</strong>.
+      Keep this in mind when printing (e.g., an A4 PDF with comments becomes wider than A4
+      on those pages). Pages without comments retain their original width.
+    </div>
+  </section>
+
+  <section id="edit">
+    <h2><span class="num">8</span> Editing and Deleting Annotations</h2>
+
+    <h3>Selecting</h3>
+    <p>Switch to the <strong>"Select"</strong> tool and <strong>click</strong> on an annotation.
+    For frames and highlights, you can click <strong>anywhere inside</strong> the bounding area
+    (not just on the border line itself).
+    A blue dashed outline with <strong>blue square fill handles</strong> at the corners and edges
+    indicates that the annotation is selected.</p>
+
+    <h3>Moving</h3>
+    <p><strong>Drag</strong> from inside the selection to reposition the annotation.</p>
+
+    <h3>Resizing</h3>
+    <p>Drag the fill handles at the corners or edges to change width or height.</p>
+    <ul>
+      <li><strong>Frame / Highlight</strong>: 8 handles (4 corners + 4 edges) for
+      free resizing in any direction</li>
+      <li><strong>Text</strong>: 6 handles (4 corners + 2 side edges) to adjust width;
+      height adjusts automatically to fit the text</li>
+    </ul>
+
+    <h3>Changing Color, Stroke Width, or Font Size</h3>
+    <p>When an annotation is selected, a <strong>properties panel</strong> appears in the
+    upper-right of the screen. Use it to adjust color, stroke width, font size,
+    opacity, width, and height.</p>
+
+    <div class="note">
+      <strong>How to deselect:</strong><br>
+      To dismiss the selection handles, use any of the following:
+      <ul style="margin-top:4px;margin-bottom:2px;">
+        <li>Click a blank area of the page</li>
+        <li>Press <strong>Enter</strong></li>
+        <li>Press <strong>Escape</strong></li>
+        <li>Switch to a different tool</li>
+      </ul>
+    </div>
+
+    <h3>Deleting</h3>
+    <ul>
+      <li>Click the red <strong>"Delete"</strong> button in the properties panel
+      (recommended)</li>
+      <li>Switch to the <strong>"Eraser"</strong> tool and click the annotation</li>
+      <li>For comments, click the <strong>×</strong> button at the top-right of the callout</li>
+    </ul>
+  </section>
+
+  <section id="pages">
+    <h2><span class="num">9</span> Reordering, Multi-selecting, and Deleting Pages</h2>
+    <p>The <strong>thumbnail strip</strong> at the bottom of the screen shows small
+    previews of each page. Drag thumbnails left or right to reorder pages.</p>
+    <p>Click the <strong>×</strong> button at the top-right of a thumbnail to
+    delete that page.</p>
+
+    <h3>Selecting Multiple Pages at Once</h3>
+    <p>You can select multiple pages to reorder or delete them together:</p>
+    <ul>
+      <li><strong>Click</strong>: Selects only the clicked page (previous selection cleared)</li>
+      <li><strong>Shift + Click</strong>: Selects all pages from the previously selected
+      page to the clicked page</li>
+      <li><strong>Ctrl + Click</strong> (Mac: <strong>Command + Click</strong>):
+      Toggles individual pages in or out of the selection</li>
+      <li><strong>Shift + ← / →</strong>: Extends the current selection one page at a time
+      in the arrow direction (does not change page order)</li>
+      <li><strong>← / → (without Shift)</strong>: Moves all selected pages one step
+      left or right</li>
+      <li><strong>Drag</strong>: Drag the selected thumbnails to move them all to a new
+      position (a badge showing "N" pages appears)</li>
+      <li><strong>Delete / Backspace</strong>: Deletes all selected pages at once
+      (a confirmation dialog appears)</li>
+    </ul>
+    <div class="note">
+      <strong>Holding Shift only extends the selection</strong> — it does not move pages.
+      To reorder pages, release Shift and use the arrow keys or drag.
+    </div>
+    <div class="note">
+      <strong>Bulk delete:</strong> Ctrl/Shift-click to select the pages you want to
+      remove, then press Delete (Mac: delete / fn+delete) or Backspace. All selected
+      pages are removed at once. A confirmation dialog appears before deletion.
+    </div>
+  </section>
+
+  <section id="rotate">
+    <h2><span class="num">10</span> Rotating Pages 90°</h2>
+    <p>Use the <strong>"↺ Rotate Left"</strong> and <strong>"↻ Rotate Right"</strong>
+    buttons in the toolbar to rotate pages by 90° increments. This is useful when
+    scanned PDFs are imported sideways.</p>
+    <ol class="steps">
+      <li>Select the page(s) you want to rotate in the thumbnail strip
+      (multi-select is supported).</li>
+      <li>Click <strong>"↺ Rotate Left"</strong> or <strong>"↻ Rotate Right"</strong>.
+      All selected pages rotate together by 90°.</li>
+    </ol>
+    <div class="note">
+      <strong>If no thumbnail is selected</strong>, only the page currently visible
+      in the main view is rotated. To fix pages one by one, scroll to the target page
+      and then click the rotate button.
+    </div>
+    <p>Rotation can be repeated as many times as needed (4 clicks returns to the
+    original orientation). The rotated orientation is preserved when you save.</p>
+  </section>
+
+  <section id="save">
+    <h2><span class="num">11</span> Saving the Edited PDF</h2>
+    <p>Click the blue <strong>"Save &amp; Download"</strong> button in the upper-right
+    to download the edited PDF to your computer (it goes to the browser's
+    Downloads folder).</p>
+    <p>The saved filename appends <code>_edited</code> to the original name:</p>
+    <p style="text-align:center;font-size:15px;">
+      Example: <code>report.pdf</code> → <code>report_edited.pdf</code>
+    </p>
+    <div class="note">
+      <strong>Annotation sizes are not affected by zoom level.</strong>
+      Even if you write text or highlights while zoomed out, the positions and sizes
+      will look correct at full size and when printed. Font sizes and stroke widths
+      are stored as PDF points (pt) — independent of the display zoom.
+    </div>
+  </section>
+
+  <section id="more">
+    <h2><span class="num">12</span> Other Useful Features</h2>
+
+    <h3>Convert Images to PDF</h3>
+    <p>Click the <strong>"Image → PDF"</strong> button to select PNG or JPEG files
+    and combine them into a single PDF.</p>
+
+    <h3>Merge Multiple PDFs</h3>
+    <p>Click the <strong>"Add PDF"</strong> button to append another PDF file to
+    the end of the currently open document.</p>
+
+    <h3>Insert Page Numbers</h3>
+    <p>Click the <strong>"Page Numbers"</strong> button to open a dialog. Choose
+    the position (e.g., bottom center) and format (e.g., <code>1/10</code>),
+    then click "Add" to automatically insert page numbers on every page.</p>
+
+    <h3>Start Over</h3>
+    <p>Click the <strong>"Clear"</strong> button to discard the current PDF and
+    start fresh.</p>
+  </section>
+
+  <section id="trouble">
+    <h2><span class="num">13</span> Troubleshooting</h2>
+
+    <div class="qa">
+      <p class="q">I typed text but it disappeared</p>
+      <p class="a">If you are composing with an IME, you may have pressed Enter twice
+      in quick succession — once to confirm the IME conversion and immediately again
+      to finalize the annotation, which deleted it. Confirm the conversion first, then
+      press Enter a second time to place the annotation.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Buttons do not respond when clicked</p>
+      <p class="a">Try updating your browser to the latest version. Recommended browsers
+      are the latest versions of Chrome, Edge, Safari, or Firefox.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">The font looks wrong or characters are not displaying correctly</p>
+      <p class="a">This app ships with a built-in font (Sawarabi Gothic), selected by
+      default in the font dropdown. To use a different font, choose
+      <code>Load custom font…</code> at the bottom of the dropdown and load a
+      <code>.ttf</code> or <code>.otf</code> file. Once loaded, it stays in the menu
+      and can be reselected at any time.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">I can't select a frame annotation by clicking on it</p>
+      <p class="a">Make sure the <strong>Select</strong> tool is active, then click
+      <strong>anywhere inside</strong> the frame — not just on the border line itself.
+      Clicking the central area works fine.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">How do I deselect an annotation after editing it?</p>
+      <p class="a">Click a blank area of the page, or press the <strong>Enter</strong>
+      or <strong>Escape</strong> key. The selection handles will disappear and the
+      annotation will be finalized.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Is there any difference between the Mac and Windows versions?</p>
+      <p class="a">No. Both versions are identical in content and functionality. This
+      guide applies to both operating systems. The only difference is
+      <strong>the filename you double-click to launch the tool</strong>
+      (Mac: <code>PDF_Tool.html</code>; Windows: <code>pdf_tool_bundled.html</code>).</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">Opening a large PDF is slow</p>
+      <p class="a">PDFs with more than 100 pages may take some time to load.
+      Please wait while the file is being processed.</p>
+    </div>
+
+    <div class="qa">
+      <p class="q">I'm worried that my files might be sent to an external server</p>
+      <p class="a">This app sends nothing to any external server. There is no code in
+      the source to upload your images, PDFs, or typed text anywhere. You can turn off
+      Wi-Fi while using it and it will continue to work perfectly. Your data stays
+      entirely on your own computer.</p>
+    </div>
+  </section>
+
+  <section id="about">
+    <h2><span class="num">14</span> About This App</h2>
+    <p>This tool is built using a <strong>"client-side"</strong> architecture.
+    In plain terms:</p>
+    <p style="text-align:center;font-size:18px;font-weight:700;color:var(--accent-dark);">
+      All PDF editing happens entirely inside your browser.
+    </p>
+    <p>It works without an internet connection, and no files or text you type ever
+    leave your computer.</p>
+    <p>Confidential business documents, files containing personal information,
+    medical records — any file you cannot afford to upload externally can be edited
+    safely with this tool.</p>
+
+    <h3>Package Contents</h3>
+    <p><strong>Mac version (PDF_Tool_Mac_EN.zip)</strong>:</p>
+    <pre class="file-list">
+<span class="star">★</span> PDF_Tool.html              <span class="cmt">← ★ Double-click this on Mac</span>
+  pdf_tool_bundled.html      <span class="cmt">← Byte-for-byte copy (ASCII filename)</span>
+  pdf_tool.html              <span class="cmt">← Library-reference variant (advanced users)</span>
+  lib/                       <span class="cmt">← Library files for the reference variant</span>
+  usage_guide.html           <span class="cmt">← This guide (open in any browser)</span>
+  LICENSE.txt                <span class="cmt">← Licenses for bundled libraries</span>
+  SHA256SUMS.txt             <span class="cmt">← File integrity hashes</span>
+    </pre>
+
+    <p style="margin-top:14px;"><strong>Windows version (PDF_Tool_Windows_EN.zip)</strong>:</p>
+    <pre class="file-list">
+<span class="star">★</span> pdf_tool_bundled.html      <span class="cmt">← ★ Double-click this on Windows</span>
+  pdf_tool.html              <span class="cmt">← Library-reference variant (advanced users)</span>
+  lib/                       <span class="cmt">← Library files for the reference variant</span>
+  usage_guide.html           <span class="cmt">← This guide (open in any browser)</span>
+  README_Windows.txt         <span class="cmt">← Troubleshooting guide for launch issues</span>
+  LICENSE.txt                <span class="cmt">← Licenses for bundled libraries</span>
+  SHA256SUMS.txt             <span class="cmt">← File integrity hashes</span>
+    </pre>
+    <div class="note">
+      The Mac-specific Japanese-named file (<code>本体：ダブルクリックで作動.html</code>)
+      is not included in the Windows package because the full-width colon character
+      in that filename is known to cause issues on Windows file systems.
+    </div>
+
+    <h3>System Requirements</h3>
+    <ul>
+      <li>OS: Windows, Mac, or Linux</li>
+      <li>Browser: Latest version of Chrome, Edge, Safari, or Firefox recommended</li>
+      <li>Internet connection: Not required</li>
+    </ul>
+  </section>
+
+  <footer>
+    Enjoy using PDF Tool.
+  </footer>
+
+</div>
+</body>
+</html>

@@ -6,7 +6,8 @@ of the PDF Tool editor by inlining all lib/ dependencies into pdf_tool.html.
 Inputs  : deploy/pdf_tool/pdf_tool.html
           deploy/pdf_tool/lib/{pdf.min.js, pdf-lib.min.js, fontkit.umd.min.js,
                                pdf.worker.min.js, SawarabiGothic-Regular.ttf}
-Output  : deploy/pdf_tool/pdf_tool_bundled.html
+Output  : deploy/pdf_tool/pdf_tool_bundled.html    (--lang ja, default)
+          deploy/pdf_tool/pdf_tool_bundled_en.html  (--lang en)
 
 Inlining strategy:
   - pdf.min.js, pdf-lib.min.js, fontkit.umd.min.js   → inlined as <script>…</script>
@@ -19,6 +20,7 @@ CSP requirements (already set in source pdf_tool.html) stay intact:
   - connect-src with no http(s):  → zero exfiltration
 """
 
+import argparse
 import base64
 import sys
 from pathlib import Path
@@ -27,7 +29,11 @@ ROOT = Path(__file__).resolve().parent.parent
 DEPLOY_DIR = ROOT / "deploy" / "pdf_tool"
 LIB_DIR = DEPLOY_DIR / "lib"
 SRC_HTML = DEPLOY_DIR / "pdf_tool.html"
-OUT_HTML = DEPLOY_DIR / "pdf_tool_bundled.html"
+
+OUT_HTML_BY_LANG = {
+    "ja": DEPLOY_DIR / "pdf_tool_bundled.html",
+    "en": DEPLOY_DIR / "pdf_tool_bundled_en.html",
+}
 
 INLINE_SCRIPTS = [
     ("lib/pdf.min.js", "pdf.min.js"),
@@ -52,7 +58,11 @@ def inline_script_tag(src_label: str, js_content: str) -> str:
     return f"<script>\n/* inlined from {src_label} */\n{safe}\n</script>"
 
 
-def build() -> None:
+def build(lang: str = "ja") -> None:
+    if lang not in ("ja", "en"):
+        print(f"ERROR: unsupported lang '{lang}'", file=sys.stderr)
+        sys.exit(1)
+
     if not SRC_HTML.exists():
         print(f"ERROR: source HTML not found: {SRC_HTML}", file=sys.stderr)
         sys.exit(1)
@@ -109,17 +119,23 @@ def build() -> None:
     html = html.replace(old_url_line, f'"{ttf_data_url}",', 1)
     print(f"  inlined TTF ({len(ttf_b64):,} b64 chars)")
 
-    # 4. Title tweak so the bundled tab label distinguishes from the lib version.
-    html = html.replace(
-        "<title>PDF Tool — クライアントサイド版 (オフライン)</title>",
-        "<title>PDF Tool — クライアントサイド版 (単一ファイル / オフライン)</title>",
-        1,
-    )
+    # 4. Apply language-specific default.
+    if lang == "en":
+        html = html.replace(
+            '<html lang="ja" data-default-lang="ja">',
+            '<html lang="en" data-default-lang="en">',
+            1,
+        )
 
-    OUT_HTML.write_text(html, encoding="utf-8")
+    out_path = OUT_HTML_BY_LANG[lang]
+    out_path.write_text(html, encoding="utf-8")
     size_mb = len(html.encode("utf-8")) / (1024 * 1024)
-    print(f"✓ wrote {OUT_HTML} ({size_mb:.2f} MB)")
+    print(f"✓ wrote {out_path.name} ({size_mb:.2f} MB)")
 
 
 if __name__ == "__main__":
-    build()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lang", choices=["ja", "en"], default="ja",
+                        help="default interface language (default: ja)")
+    args = parser.parse_args()
+    build(lang=args.lang)

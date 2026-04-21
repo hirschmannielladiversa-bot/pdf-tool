@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" data-default-lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -83,6 +83,8 @@ html, body {
 }
 .tb-sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
 .tb-info { color: var(--muted); font-size: 12px; margin-left: auto; }
+#btn-lang { min-width: 38px; padding: 4px 8px; font-size: 11px; opacity: 0.75; }
+#btn-lang:hover { opacity: 1; }
 .tb-color {
   width: 28px; height: 28px;
   border: 1px solid var(--border);
@@ -770,54 +772,55 @@ html, body {
 
   <div id="toolbar">
     <h1>PDF Tool</h1>
-    <button class="tb-btn primary" id="btn-open">PDFを開く</button>
-    <button class="tb-btn" id="btn-merge">PDFを追加</button>
-    <button class="tb-btn" id="btn-img2pdf">画像→PDF</button>
+    <button class="tb-btn primary" id="btn-open" data-i18n="tb.open">PDFを開く</button>
+    <button class="tb-btn" id="btn-merge" data-i18n="tb.merge">PDFを追加</button>
+    <button class="tb-btn" id="btn-img2pdf" data-i18n="tb.img2pdf">画像→PDF</button>
     <span class="tb-sep"></span>
 
     <!-- Annotation tools -->
-    <button class="tb-btn tool active" data-tool="select" title="選択 / 移動 / リサイズ">選択</button>
-    <button class="tb-btn tool" data-tool="text" title="テキスト注釈">テキスト</button>
-    <button class="tb-btn tool" data-tool="highlight" title="ハイライト (塗りつぶし矩形)">ハイライト</button>
-    <button class="tb-btn tool" data-tool="frame" title="枠線 (矩形のアウトライン)">枠線</button>
-    <button class="tb-btn tool" data-tool="strikethrough" title="取り消し線 (二重線で見え消し)">取り消し線</button>
-    <button class="tb-btn tool" data-tool="pen" title="ペン (フリーハンド)">ペン</button>
-    <button class="tb-btn tool" data-tool="comment" title="コメント (ページ外の吹き出し)">コメント</button>
-    <button class="tb-btn tool" data-tool="eraser" title="消しゴム (クリックで削除)">消しゴム</button>
-    <input type="color" class="tb-color" id="tool-color" value="#ff3030" title="色">
-    <input type="number" class="tb-num" id="tool-size" value="14" min="2" max="72" title="サイズ / 太さ / フォント">
+    <button class="tb-btn tool active" data-tool="select" data-i18n="tb.select" data-i18n-title="tb.title.select" title="選択 / 移動 / リサイズ">選択</button>
+    <button class="tb-btn tool" data-tool="text" data-i18n="tb.text" data-i18n-title="tb.title.text" title="テキスト注釈">テキスト</button>
+    <button class="tb-btn tool" data-tool="highlight" data-i18n="tb.highlight" data-i18n-title="tb.title.highlight" title="ハイライト (塗りつぶし矩形)">ハイライト</button>
+    <button class="tb-btn tool" data-tool="frame" data-i18n="tb.frame" data-i18n-title="tb.title.frame" title="枠線 (矩形のアウトライン)">枠線</button>
+    <button class="tb-btn tool" data-tool="strikethrough" data-i18n="tb.strikethrough" data-i18n-title="tb.title.strikethrough" title="取り消し線 (二重線で見え消し)">取り消し線</button>
+    <button class="tb-btn tool" data-tool="pen" data-i18n="tb.pen" data-i18n-title="tb.title.pen" title="ペン (フリーハンド)">ペン</button>
+    <button class="tb-btn tool" data-tool="comment" data-i18n="tb.comment" data-i18n-title="tb.title.comment" title="コメント (ページ外の吹き出し)">コメント</button>
+    <button class="tb-btn tool" data-tool="eraser" data-i18n="tb.eraser" data-i18n-title="tb.title.eraser" title="消しゴム (クリックで削除)">消しゴム</button>
+    <input type="color" class="tb-color" id="tool-color" value="#ff3030" data-i18n-title="tb.title.color" title="色">
+    <input type="number" class="tb-num" id="tool-size" value="14" min="2" max="72" data-i18n-title="tb.title.size" title="サイズ / 太さ / フォント">
 
     <span class="tb-sep"></span>
-    <select class="tb-select" id="font-select" title="埋め込みフォントを選択">
+    <select class="tb-select" id="font-select" data-i18n-title="tb.title.fontSelect" title="埋め込みフォントを選択">
       <option value="0">ゴシック体 (Sawarabi Gothic)</option>
       <option value="_load">カスタムフォントを読み込む…</option>
     </select>
-    <button class="tb-btn" id="btn-pagenum" disabled>ページ番号</button>
-    <button class="tb-btn" id="btn-clear" disabled>クリア</button>
+    <button class="tb-btn" id="btn-pagenum" data-i18n="tb.pagenum" disabled>ページ番号</button>
+    <button class="tb-btn" id="btn-clear" data-i18n="tb.clear" disabled>クリア</button>
     <span class="tb-sep"></span>
-    <button class="tb-btn" id="btn-rotate-left" disabled title="選択ページを左90°回転 (未選択時は表示中のページ1枚)">↺左回転</button>
-    <button class="tb-btn" id="btn-rotate-right" disabled title="選択ページを右90°回転 (未選択時は表示中のページ1枚)">↻右回転</button>
+    <button class="tb-btn" id="btn-rotate-left" disabled data-i18n="tb.rotateLeft" data-i18n-title="tb.title.rotateLeft" title="選択ページを左90°回転 (未選択時は表示中のページ1枚)">↺左回転</button>
+    <button class="tb-btn" id="btn-rotate-right" disabled data-i18n="tb.rotateRight" data-i18n-title="tb.title.rotateRight" title="選択ページを右90°回転 (未選択時は表示中のページ1枚)">↻右回転</button>
     <span class="tb-sep"></span>
-    <button class="tb-btn" id="btn-zoom-out" title="ズームアウト">−</button>
-    <button class="tb-btn" id="btn-zoom-reset" title="100% に戻す">100%</button>
-    <button class="tb-btn" id="btn-zoom-in" title="ズームイン">＋</button>
+    <button class="tb-btn" id="btn-zoom-out" data-i18n-title="tb.title.zoomOut" title="ズームアウト">−</button>
+    <button class="tb-btn" id="btn-zoom-reset" data-i18n-title="tb.title.zoomReset" title="100% に戻す">100%</button>
+    <button class="tb-btn" id="btn-zoom-in" data-i18n-title="tb.title.zoomIn" title="ズームイン">＋</button>
     <span class="tb-sep"></span>
-    <button class="tb-btn primary" id="btn-save" disabled title="編集内容を埋め込んだ PDF をダウンロード">保存・ダウンロード</button>
+    <button class="tb-btn primary" id="btn-save" disabled data-i18n="tb.save" data-i18n-title="tb.title.save" title="編集内容を埋め込んだ PDF をダウンロード">保存・ダウンロード</button>
+    <button class="tb-btn" id="btn-lang" title="Switch language / 言語切替">EN</button>
     <span class="tb-info" id="info">PDFが読み込まれていません</span>
   </div>
 
   <div id="viewer">
     <div id="welcome">
-      <h2>クライアントサイド PDF Tool</h2>
-      <p>「PDFを開く」または「画像→PDF」で開始してください。</p>
+      <h2 data-i18n="welcome.title">クライアントサイド PDF Tool</h2>
+      <p data-i18n="welcome.sub">「PDFを開く」または「画像→PDF」で開始してください。</p>
       <p style="font-size:12px;margin-top:16px">
-        ・サムネイルをドラッグして並べ替え（複数選択: Shift クリック=範囲 / Ctrl・Cmd クリック=個別トグル / Shift+←→=範囲拡張 / ←→=まとめて移動）<br>
-        ・サムネ右上の × で 1 ページ削除 / 複数選択中に Delete・Backspace キーでまとめて削除<br>
-        ・「↺左回転 / ↻右回転」で 1 ページずつ回転（サムネ未選択時は表示中の 1 枚、複数選択でまとめて回転）<br>
-        ・ツールバー右のズーム（−／100%／＋）で拡大縮小、フォントはプルダウンで切替<br>
-        ・ツールバーで注釈ツールを選択 → ページ上で描画<br>
-        ・「コメント」ツール: ページ上をクリック → 右外のガターに吹き出し。A− / A+ でサイズ、「返信」で返信追加、右下ハンドルで枠拡大<br>
-        ・全処理はブラウザ内で完結（外部送信なし）
+        <span data-i18n="welcome.tip1">・サムネイルをドラッグして並べ替え（複数選択: Shift クリック=範囲 / Ctrl・Cmd クリック=個別トグル / Shift+←→=範囲拡張 / ←→=まとめて移動）</span><br>
+        <span data-i18n="welcome.tip2">・サムネ右上の × で 1 ページ削除 / 複数選択中に Delete・Backspace キーでまとめて削除</span><br>
+        <span data-i18n="welcome.tip3">・「↺左回転 / ↻右回転」で 1 ページずつ回転（サムネ未選択時は表示中の 1 枚、複数選択でまとめて回転）</span><br>
+        <span data-i18n="welcome.tip4">・ツールバー右のズーム（−／100%／＋）で拡大縮小、フォントはプルダウンで切替</span><br>
+        <span data-i18n="welcome.tip5">・ツールバーで注釈ツールを選択 → ページ上で描画</span><br>
+        <span data-i18n="welcome.tip6">・「コメント」ツール: ページ上をクリック → 右外のガターに吹き出し。A− / A+ でサイズ、「返信」で返信追加、右下ハンドルで枠拡大</span><br>
+        <span data-i18n="welcome.tip7">・全処理はブラウザ内で完結（外部送信なし）</span>
       </p>
     </div>
   </div>
@@ -833,74 +836,74 @@ html, body {
 <!-- Page number dialog -->
 <div class="modal-overlay" id="pn-modal">
   <div class="modal">
-    <h3>ページ番号を追加</h3>
-    <label><span>位置</span>
+    <h3 data-i18n="modal.pn.title">ページ番号を追加</h3>
+    <label><span data-i18n="modal.pn.pos">位置</span>
       <select id="pn-pos">
-        <option value="bottom-center" selected>下中央</option>
-        <option value="bottom-left">下左</option>
-        <option value="bottom-right">下右</option>
-        <option value="top-center">上中央</option>
-        <option value="top-left">上左</option>
-        <option value="top-right">上右</option>
+        <option value="bottom-center" selected data-i18n="modal.pn.posBottomCenter">下中央</option>
+        <option value="bottom-left" data-i18n="modal.pn.posBottomLeft">下左</option>
+        <option value="bottom-right" data-i18n="modal.pn.posBottomRight">下右</option>
+        <option value="top-center" data-i18n="modal.pn.posTopCenter">上中央</option>
+        <option value="top-left" data-i18n="modal.pn.posTopLeft">上左</option>
+        <option value="top-right" data-i18n="modal.pn.posTopRight">上右</option>
       </select>
     </label>
-    <label><span>書式</span>
-      <input type="text" id="pn-format" value="{page}" placeholder="例: {page}/{total}">
+    <label><span data-i18n="modal.pn.format">書式</span>
+      <input type="text" id="pn-format" value="{page}" data-i18n-placeholder="modal.pn.formatPh" placeholder="例: {page}/{total}">
     </label>
-    <label><span>フォントサイズ</span>
+    <label><span data-i18n="modal.pn.fontSize">フォントサイズ</span>
       <input type="number" id="pn-size" value="12" min="6" max="48">
     </label>
-    <label><span>開始番号</span>
+    <label><span data-i18n="modal.pn.startNum">開始番号</span>
       <input type="number" id="pn-start" value="1" min="0">
     </label>
-    <label><span>スキップページ</span>
-      <input type="text" id="pn-skip" placeholder="例: 1,2 (空でなし)">
+    <label><span data-i18n="modal.pn.skip">スキップページ</span>
+      <input type="text" id="pn-skip" data-i18n-placeholder="modal.pn.skipPh" placeholder="例: 1,2 (空でなし)">
     </label>
     <div class="modal-buttons">
-      <button class="tb-btn" id="pn-cancel">キャンセル</button>
-      <button class="tb-btn primary" id="pn-ok">追加</button>
+      <button class="tb-btn" id="pn-cancel" data-i18n="modal.pn.cancel">キャンセル</button>
+      <button class="tb-btn primary" id="pn-ok" data-i18n="modal.pn.ok">追加</button>
     </div>
   </div>
 </div>
 
 <!-- Property panel for the currently selected annotation -->
 <div id="prop-panel">
-  <h4 id="prop-title">注釈</h4>
+  <h4 id="prop-title" data-i18n="prop.title">注釈</h4>
   <div class="row" id="row-color">
-    <label>色</label>
+    <label data-i18n="prop.color">色</label>
     <input type="color" id="prop-color">
   </div>
   <div class="row" id="row-fontsize" style="display:none">
-    <label>フォント</label>
+    <label data-i18n="prop.font">フォント</label>
     <input type="number" id="prop-fontsize" min="4" max="200" step="1">
     <span style="color:var(--muted);font-size:11px">pt</span>
   </div>
   <div class="row" id="row-stroke" style="display:none">
-    <label>線の太さ</label>
+    <label data-i18n="prop.stroke">線の太さ</label>
     <input type="number" id="prop-stroke" min="0.5" max="40" step="0.5">
     <span style="color:var(--muted);font-size:11px">pt</span>
   </div>
-  <div class="row" id="row-gap" style="display:none" title="二重線の間隔。大きい文字に合わせて広げると二重に見えます。">
-    <label>二重線の間隔</label>
+  <div class="row" id="row-gap" style="display:none" data-i18n-title="prop.gapTitle" title="二重線の間隔。大きい文字に合わせて広げると二重に見えます。">
+    <label data-i18n="prop.gap">二重線の間隔</label>
     <input type="number" id="prop-gap" min="0" max="40" step="0.5">
     <span style="color:var(--muted);font-size:11px">pt</span>
   </div>
   <div class="row" id="row-w" style="display:none">
-    <label>幅</label>
+    <label data-i18n="prop.width">幅</label>
     <input type="number" id="prop-w" min="2" step="1">
     <span style="color:var(--muted);font-size:11px">pt</span>
   </div>
   <div class="row" id="row-h" style="display:none">
-    <label>高さ</label>
+    <label data-i18n="prop.height">高さ</label>
     <input type="number" id="prop-h" min="2" step="1">
     <span style="color:var(--muted);font-size:11px">pt</span>
   </div>
   <div class="row">
-    <label>透明度</label>
+    <label data-i18n="prop.opacity">透明度</label>
     <input type="range" id="prop-opacity" min="0" max="100" step="1">
     <span class="opacity-val" id="prop-opacity-val">100</span>
   </div>
-  <button class="del" id="prop-delete">削除</button>
+  <button class="del" id="prop-delete" data-i18n="prop.delete">削除</button>
 </div>
 
 <div id="toast"></div>
@@ -913,6 +916,234 @@ html, body {
 pdfjsLib.GlobalWorkerOptions.workerSrc = "lib/pdf.worker.min.js";
 
 const { PDFDocument, StandardFonts, rgb, degrees } = PDFLib;
+
+// =============================================================================
+// I18N — bilingual UI (Japanese / English)
+// Add new keys to BOTH ja and en sections. Use t('key', {var: val}) everywhere.
+// =============================================================================
+const I18N = {
+  ja: {
+    'title.main': 'PDF Tool — クライアントサイド版 (オフライン)',
+    'tb.open': 'PDFを開く', 'tb.merge': 'PDFを追加', 'tb.img2pdf': '画像→PDF',
+    'tb.select': '選択', 'tb.text': 'テキスト', 'tb.highlight': 'ハイライト',
+    'tb.frame': '枠線', 'tb.strikethrough': '取り消し線', 'tb.pen': 'ペン',
+    'tb.comment': 'コメント', 'tb.eraser': '消しゴム',
+    'tb.pagenum': 'ページ番号', 'tb.clear': 'クリア',
+    'tb.rotateLeft': '↺左回転', 'tb.rotateRight': '↻右回転',
+    'tb.save': '保存・ダウンロード', 'tb.lang': 'EN',
+    'tb.title.select': '選択 / 移動 / リサイズ',
+    'tb.title.text': 'テキスト注釈',
+    'tb.title.highlight': 'ハイライト (塗りつぶし矩形)',
+    'tb.title.frame': '枠線 (矩形のアウトライン)',
+    'tb.title.strikethrough': '取り消し線 (二重線で見え消し)',
+    'tb.title.pen': 'ペン (フリーハンド)',
+    'tb.title.comment': 'コメント (ページ外の吹き出し)',
+    'tb.title.eraser': '消しゴム (クリックで削除)',
+    'tb.title.color': '色', 'tb.title.size': 'サイズ / 太さ / フォント',
+    'tb.title.fontSelect': '埋め込みフォントを選択',
+    'tb.title.rotateLeft': '選択ページを左90°回転 (未選択時は表示中のページ1枚)',
+    'tb.title.rotateRight': '選択ページを右90°回転 (未選択時は表示中のページ1枚)',
+    'tb.title.zoomOut': 'ズームアウト', 'tb.title.zoomReset': '100% に戻す',
+    'tb.title.zoomIn': 'ズームイン',
+    'tb.title.save': '編集内容を埋め込んだ PDF をダウンロード',
+    'font.gothic': 'ゴシック体 (Sawarabi Gothic)',
+    'font.loadCustom': 'カスタムフォントを読み込む…',
+    'welcome.title': 'クライアントサイド PDF Tool',
+    'welcome.sub': '「PDFを開く」または「画像→PDF」で開始してください。',
+    'welcome.tip1': '・サムネイルをドラッグして並べ替え（複数選択: Shift クリック=範囲 / Ctrl・Cmd クリック=個別トグル / Shift+←→=範囲拡張 / ←→=まとめて移動）',
+    'welcome.tip2': '・サムネ右上の × で 1 ページ削除 / 複数選択中に Delete・Backspace キーでまとめて削除',
+    'welcome.tip3': '・「↺左回転 / ↻右回転」で 1 ページずつ回転（サムネ未選択時は表示中の 1 枚、複数選択でまとめて回転）',
+    'welcome.tip4': '・ツールバー右のズーム（−／100%／＋）で拡大縮小、フォントはプルダウンで切替',
+    'welcome.tip5': '・ツールバーで注釈ツールを選択 → ページ上で描画',
+    'welcome.tip6': '・「コメント」ツール: ページ上をクリック → 右外のガターに吹き出し。A− / A+ でサイズ、「返信」で返信追加、右下ハンドルで枠拡大',
+    'welcome.tip7': '・全処理はブラウザ内で完結（外部送信なし）',
+    'modal.pn.title': 'ページ番号を追加',
+    'modal.pn.pos': '位置', 'modal.pn.format': '書式',
+    'modal.pn.posBottomCenter': '下中央', 'modal.pn.posBottomLeft': '下左',
+    'modal.pn.posBottomRight': '下右', 'modal.pn.posTopCenter': '上中央',
+    'modal.pn.posTopLeft': '上左', 'modal.pn.posTopRight': '上右',
+    'modal.pn.formatPh': '例: {page}/{total}',
+    'modal.pn.fontSize': 'フォントサイズ', 'modal.pn.startNum': '開始番号',
+    'modal.pn.skip': 'スキップページ', 'modal.pn.skipPh': '例: 1,2 (空でなし)',
+    'modal.pn.cancel': 'キャンセル', 'modal.pn.ok': '追加',
+    'prop.title': '注釈', 'prop.color': '色', 'prop.font': 'フォント',
+    'prop.stroke': '線の太さ', 'prop.gap': '二重線の間隔',
+    'prop.gapTitle': '二重線の間隔。大きい文字に合わせて広げると二重に見えます。',
+    'prop.width': '幅', 'prop.height': '高さ',
+    'prop.opacity': '透明度', 'prop.delete': '削除',
+    'ann.title.text': 'テキスト', 'ann.title.highlight': 'ハイライト',
+    'ann.title.frame': '枠線', 'ann.title.pen': 'ペン',
+    'ann.title.strikethrough': '取り消し線', 'ann.title.comment': 'コメント',
+    'cmt.title': 'コメント', 'cmt.fsDecTitle': '文字を小さく',
+    'cmt.fsIncTitle': '文字を大きく', 'cmt.reply': '返信',
+    'cmt.replyTitle': '返信を追加', 'cmt.delTitle': 'コメントを削除',
+    'cmt.resizeTitle': 'サイズ変更', 'cmt.replyDelTitle': '返信を削除',
+    'cmt.replyLabel': '返信 {n}',
+    'thumb.delTitle': 'ページを削除',
+    'ann.textPh': 'テキスト (Enter で確定 / Shift+Enter で改行)',
+    'msg.noPdf': 'PDFが読み込まれていません',
+    'msg.fileInfo': '{name} — {n} ページ',
+    'msg.loadingFont': '日本語フォントを読み込み中...',
+    'msg.fontSet': 'フォントを設定: {name}',
+    'msg.fontSelected': 'フォント選択: {name}',
+    'msg.pdfLoaded': '{name} を読み込みました ({n} ページ)',
+    'msg.pdfMerged': '{name} を追加 (+{n} ページ)',
+    'msg.imgConverted': '{n} 枚の画像からPDFを生成',
+    'msg.reorderOne': 'ページを並べ替えました',
+    'msg.reorderMulti': '{n} ページをまとめて並べ替え',
+    'msg.cannotDeleteLast': '最後のページは削除できません',
+    'msg.cannotDeleteAll': 'すべてのページは削除できません',
+    'msg.confirmDeletePage': 'ページ {n} を削除しますか？',
+    'msg.confirmDeletePages': '選択中の {n} ページを削除しますか？',
+    'msg.deletedPage': 'ページ {n} を削除',
+    'msg.deletedPages': '{n} ページを削除しました',
+    'msg.zoom': 'ズーム: {pct}% (表示倍率 {scale}×)',
+    'msg.fontLoadFail': 'フォントファイルの読み込みに失敗しました: {err}',
+    'err.fontNotSelected': 'フォントが選択されていません',
+    'msg.noRotatePage': '回転するページがありません',
+    'msg.rotateOne': 'ページ {n} を{dir}回転',
+    'msg.rotateMulti': '{n} ページを{dir}回転',
+    'dir.left': '左', 'dir.right': '右',
+    'msg.annDeleted': '注釈を削除',
+    'msg.fontFallback': '日本語フォント取得失敗 — Helveticaを使用',
+    'msg.pageNumAdded': 'ページ番号を追加',
+    'msg.fontFallbackExportOnly': '日本語フォント読込失敗 — 英数字のみ保存',
+    'msg.replyPdf': '↳ 返信 {n}',
+    'msg.annSkipped': '{n} 個のテキスト注釈をスキップ (フォント未対応文字)',
+  },
+  en: {
+    'title.main': 'PDF Tool — Client-side (Offline)',
+    'tb.open': 'Open PDF', 'tb.merge': 'Add PDF', 'tb.img2pdf': 'Image→PDF',
+    'tb.select': 'Select', 'tb.text': 'Text', 'tb.highlight': 'Highlight',
+    'tb.frame': 'Frame', 'tb.strikethrough': 'Strikethrough', 'tb.pen': 'Pen',
+    'tb.comment': 'Comment', 'tb.eraser': 'Eraser',
+    'tb.pagenum': 'Page Numbers', 'tb.clear': 'Clear',
+    'tb.rotateLeft': '↺ Rotate L', 'tb.rotateRight': '↻ Rotate R',
+    'tb.save': 'Save & Download', 'tb.lang': 'JP',
+    'tb.title.select': 'Select / Move / Resize',
+    'tb.title.text': 'Text annotation',
+    'tb.title.highlight': 'Highlight (filled rectangle)',
+    'tb.title.frame': 'Frame (rectangle outline)',
+    'tb.title.strikethrough': 'Strikethrough (double line)',
+    'tb.title.pen': 'Pen (freehand)',
+    'tb.title.comment': 'Comment (margin callout)',
+    'tb.title.eraser': 'Eraser (click to delete)',
+    'tb.title.color': 'Color', 'tb.title.size': 'Size / Thickness / Font',
+    'tb.title.fontSelect': 'Select embedded font',
+    'tb.title.rotateLeft': 'Rotate selected page(s) 90° left (single visible page if none selected)',
+    'tb.title.rotateRight': 'Rotate selected page(s) 90° right (single visible page if none selected)',
+    'tb.title.zoomOut': 'Zoom out', 'tb.title.zoomReset': 'Reset to 100%',
+    'tb.title.zoomIn': 'Zoom in',
+    'tb.title.save': 'Download PDF with embedded annotations',
+    'font.gothic': 'Gothic (Sawarabi Gothic)',
+    'font.loadCustom': 'Load custom font…',
+    'welcome.title': 'Client-side PDF Tool',
+    'welcome.sub': 'Click "Open PDF" or "Image→PDF" to get started.',
+    'welcome.tip1': '· Drag thumbnails to reorder (multi-select: Shift+click=range / Ctrl·Cmd+click=toggle / Shift+←→=extend / ←→=move)',
+    'welcome.tip2': '· Click × on thumbnail to delete a page / Delete·Backspace with multiple selected to remove all',
+    'welcome.tip3': '· Rotate pages with ↺/↻ (no thumbnail selected: visible page; multi-select: rotate all at once)',
+    'welcome.tip4': '· Zoom with −/100%/＋ in the toolbar; switch fonts via the dropdown',
+    'welcome.tip5': '· Select an annotation tool in the toolbar, then draw on the page',
+    'welcome.tip6': '· Comment tool: click on the page → callout in right margin. A−/A+ to resize text, Reply to add replies, bottom-right handle to resize the box',
+    'welcome.tip7': '· All processing happens in your browser (no data sent externally)',
+    'modal.pn.title': 'Add Page Numbers',
+    'modal.pn.pos': 'Position', 'modal.pn.format': 'Format',
+    'modal.pn.posBottomCenter': 'Bottom Center', 'modal.pn.posBottomLeft': 'Bottom Left',
+    'modal.pn.posBottomRight': 'Bottom Right', 'modal.pn.posTopCenter': 'Top Center',
+    'modal.pn.posTopLeft': 'Top Left', 'modal.pn.posTopRight': 'Top Right',
+    'modal.pn.formatPh': 'e.g. {page}/{total}',
+    'modal.pn.fontSize': 'Font Size', 'modal.pn.startNum': 'Start Number',
+    'modal.pn.skip': 'Skip Pages', 'modal.pn.skipPh': 'e.g. 1,2 (empty = none)',
+    'modal.pn.cancel': 'Cancel', 'modal.pn.ok': 'Add',
+    'prop.title': 'Annotation', 'prop.color': 'Color', 'prop.font': 'Font',
+    'prop.stroke': 'Stroke Width', 'prop.gap': 'Double-line Gap',
+    'prop.gapTitle': 'Gap between the two strikethrough lines. Widen to match larger text.',
+    'prop.width': 'Width', 'prop.height': 'Height',
+    'prop.opacity': 'Opacity', 'prop.delete': 'Delete',
+    'ann.title.text': 'Text', 'ann.title.highlight': 'Highlight',
+    'ann.title.frame': 'Frame', 'ann.title.pen': 'Pen',
+    'ann.title.strikethrough': 'Strikethrough', 'ann.title.comment': 'Comment',
+    'cmt.title': 'Comment', 'cmt.fsDecTitle': 'Decrease font size',
+    'cmt.fsIncTitle': 'Increase font size', 'cmt.reply': 'Reply',
+    'cmt.replyTitle': 'Add reply', 'cmt.delTitle': 'Delete comment',
+    'cmt.resizeTitle': 'Resize', 'cmt.replyDelTitle': 'Delete reply',
+    'cmt.replyLabel': 'Reply {n}',
+    'thumb.delTitle': 'Delete page',
+    'ann.textPh': 'Text (Enter to confirm / Shift+Enter for newline)',
+    'msg.noPdf': 'No PDF loaded',
+    'msg.fileInfo': '{name} — {n} page(s)',
+    'msg.loadingFont': 'Loading font…',
+    'msg.fontSet': 'Font set: {name}',
+    'msg.fontSelected': 'Font selected: {name}',
+    'msg.pdfLoaded': 'Loaded {name} ({n} page(s))',
+    'msg.pdfMerged': 'Added {name} (+{n} page(s))',
+    'msg.imgConverted': 'Generated PDF from {n} image(s)',
+    'msg.reorderOne': 'Page reordered',
+    'msg.reorderMulti': '{n} pages reordered',
+    'msg.cannotDeleteLast': 'Cannot delete the last page',
+    'msg.cannotDeleteAll': 'Cannot delete all pages',
+    'msg.confirmDeletePage': 'Delete page {n}?',
+    'msg.confirmDeletePages': 'Delete {n} selected page(s)?',
+    'msg.deletedPage': 'Page {n} deleted',
+    'msg.deletedPages': '{n} page(s) deleted',
+    'msg.zoom': 'Zoom: {pct}% (scale {scale}×)',
+    'msg.fontLoadFail': 'Failed to load font: {err}',
+    'err.fontNotSelected': 'No font selected',
+    'msg.noRotatePage': 'No pages to rotate',
+    'msg.rotateOne': 'Page {n} rotated {dir}',
+    'msg.rotateMulti': '{n} page(s) rotated {dir}',
+    'dir.left': 'left', 'dir.right': 'right',
+    'msg.annDeleted': 'Annotation deleted',
+    'msg.fontFallback': 'Font load failed — using Helvetica',
+    'msg.pageNumAdded': 'Page numbers added',
+    'msg.fontFallbackExportOnly': 'Font load failed — ASCII only saved',
+    'msg.replyPdf': '↳ Reply {n}',
+    'msg.annSkipped': '{n} text annotation(s) skipped (unsupported characters)',
+  },
+};
+
+let _lang = 'ja';
+
+function t(key, vars) {
+  const dict = I18N[_lang] || I18N.ja;
+  let s = (key in dict) ? dict[key] : (I18N.ja[key] ?? key);
+  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll('{' + k + '}', v);
+  return s;
+}
+
+function applyLang(lang) {
+  _lang = lang;
+  document.documentElement.lang = lang;
+  document.title = t('title.main');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  refreshFontSelect();
+  const btnLang = document.getElementById('btn-lang');
+  if (btnLang) btnLang.textContent = t('tb.lang');
+  // Sync info bar (dynamically managed, so not covered by data-i18n).
+  const infoEl = document.getElementById('info');
+  if (infoEl) {
+    try {
+      infoEl.textContent = state.pdfDoc
+        ? t('msg.fileInfo', {name: state.fileName, n: state.pdfDoc.getPageCount()})
+        : t('msg.noPdf');
+    } catch(e) { infoEl.textContent = t('msg.noPdf'); }
+  }
+  try { localStorage.pdfToolLang = lang; } catch(e) {}
+}
+
+function initLang() {
+  const params = new URLSearchParams(location.search);
+  const urlLang = params.get('lang');
+  if (urlLang === 'ja' || urlLang === 'en') { applyLang(urlLang); return; }
+  let stored = null;
+  try { stored = localStorage.pdfToolLang; } catch(e) {}
+  if (stored === 'ja' || stored === 'en') { applyLang(stored); return; }
+  const def = document.documentElement.dataset.defaultLang;
+  if (def === 'ja' || def === 'en') { applyLang(def); return; }
+  applyLang(navigator.language && navigator.language.startsWith('ja') ? 'ja' : 'en');
+}
 
 // ----- Japanese font loaded on demand via fontkit ---------------------------
 // pdf-lib's StandardFonts only support Latin-1, so any Japanese content needs
@@ -940,7 +1171,7 @@ let jpFontSourceLabel = null;      // for status reporting
 
 async function loadJpFontBytes() {
   const entry = fontRegistry[currentFontIdx];
-  if (!entry) throw new Error("フォントが選択されていません");
+  if (!entry) throw new Error(t('err.fontNotSelected'));
   if (entry.bytes) {
     jpFontBytesCache = entry.bytes;
     jpFontSourceLabel = entry.name;
@@ -951,7 +1182,7 @@ async function loadJpFontBytes() {
   }
   // Bundled font: fetch from lib/ (or data URL in the bundled build).
   if (jpFontFetchPromise) return jpFontFetchPromise;
-  toast("日本語フォントを読み込み中...", 6000);
+  toast(t('msg.loadingFont'), 6000);
   jpFontFetchPromise = (async () => {
     const errors = [];
     for (const url of JP_FONT_URLS) {
@@ -997,7 +1228,7 @@ async function setJpFontFromFile(file) {
   jpFontBytesCache = bytes;
   jpFontSourceLabel = file.name;
   refreshFontSelect();
-  toast(`フォントを設定: ${file.name}`);
+  toast(t('msg.fontSet', {name: file.name}));
 }
 
 /** Re-render the font pulldown options to match fontRegistry. */
@@ -1008,13 +1239,13 @@ function refreshFontSelect() {
   fontRegistry.forEach((entry, idx) => {
     const opt = document.createElement("option");
     opt.value = String(idx);
-    opt.textContent = entry.source === "user" ? `★ ${entry.name}` : entry.name;
+    opt.textContent = entry.source === "user" ? `★ ${entry.name}` : t('font.gothic');
     if (idx === currentFontIdx) opt.selected = true;
     sel.appendChild(opt);
   });
   const loadOpt = document.createElement("option");
   loadOpt.value = "_load";
-  loadOpt.textContent = "カスタムフォントを読み込む…";
+  loadOpt.textContent = t('font.loadCustom');
   sel.appendChild(loadOpt);
 }
 
@@ -1125,7 +1356,7 @@ async function loadPdfFromFile(file) {
     return { width, height };
   });
   await refresh();
-  toast(`${file.name} を読み込みました (${state.pdfDoc.getPageCount()} ページ)`);
+  toast(t('msg.pdfLoaded', {name: file.name, n: state.pdfDoc.getPageCount()}));
 }
 
 async function appendPdfFromFile(file) {
@@ -1137,7 +1368,7 @@ async function appendPdfFromFile(file) {
   copied.forEach(p => state.pdfDoc.addPage(p));
   for (let i = 0; i < indices.length; i++) state.annotations.push([]);
   await persist();
-  toast(`${file.name} を追加 (+${indices.length} ページ)`);
+  toast(t('msg.pdfMerged', {name: file.name, n: indices.length}));
 }
 
 async function imagesToPdf(files) {
@@ -1152,7 +1383,7 @@ async function imagesToPdf(files) {
   state.fileName = "images.pdf";
   state.annotations = doc.getPages().map(() => []);
   await persist();
-  toast(`${files.length} 枚の画像からPDFを生成`);
+  toast(t('msg.imgConverted', {n: files.length}));
 }
 
 // Persist current pdfDoc → bytes, then reload + refresh UI.
@@ -1182,11 +1413,11 @@ async function refresh() {
     viewer.innerHTML = "";
     viewer.appendChild(welcome);
     strip.innerHTML = "";
-    info.textContent = "PDFが読み込まれていません";
+    info.textContent = t('msg.noPdf');
     return;
   }
   if (welcome.parentNode) welcome.remove();
-  info.textContent = `${state.fileName} — ${state.pdfDoc.getPageCount()} ページ`;
+  info.textContent = t('msg.fileInfo', {name: state.fileName, n: state.pdfDoc.getPageCount()});
   await renderPages();
   await renderThumbnails();
 }
@@ -1293,7 +1524,7 @@ async function renderThumbnails() {
     const del = document.createElement("button");
     del.className = "thumb-del";
     del.textContent = "×";
-    del.title = "ページを削除";
+    del.title = t('thumb.delTitle');
     del.addEventListener("pointerdown", e => e.stopPropagation());
     del.addEventListener("click", e => {
       e.stopPropagation();
@@ -1560,16 +1791,16 @@ async function reorderPdfMany(sourceIndices, insertIdx) {
   state.selectionCursor = preservedCursor;
   updateThumbSelectionClass();
   toast(sources.length > 1
-    ? `${sources.length} ページをまとめて並べ替え`
-    : "ページを並べ替えました");
+    ? t('msg.reorderMulti', {n: sources.length})
+    : t('msg.reorderOne'));
 }
 
 async function deletePage(pageNum) {
   if (state.pdfDoc.getPageCount() <= 1) {
-    toast("最後のページは削除できません");
+    toast(t('msg.cannotDeleteLast'));
     return;
   }
-  if (!confirm(`ページ ${pageNum} を削除しますか？`)) return;
+  if (!confirm(t('msg.confirmDeletePage', {n: pageNum}))) return;
   const removedIdx = pageNum - 1;
   state.pdfDoc.removePage(removedIdx);
   state.annotations.splice(removedIdx, 1);
@@ -1585,7 +1816,7 @@ async function deletePage(pageNum) {
     state.lastClickedPage -= 1;
   }
   await persist();
-  toast(`ページ ${pageNum} を削除`);
+  toast(t('msg.deletedPage', {n: pageNum}));
 }
 
 /** Delete multiple pages at once using the current multi-selection. */
@@ -1597,12 +1828,12 @@ async function deletePagesMany(indices) {
     .sort((a, b) => a - b);
   if (sources.length === 0) return;
   if (sources.length >= total) {
-    toast("すべてのページは削除できません");
+    toast(t('msg.cannotDeleteAll'));
     return;
   }
   const msg = sources.length === 1
-    ? `ページ ${sources[0] + 1} を削除しますか？`
-    : `選択中の ${sources.length} ページを削除しますか？`;
+    ? t('msg.confirmDeletePage', {n: sources[0] + 1})
+    : t('msg.confirmDeletePages', {n: sources.length});
   if (!confirm(msg)) return;
   // Delete in DESCENDING order so earlier indices stay valid as we splice.
   for (let i = sources.length - 1; i >= 0; i--) {
@@ -1614,7 +1845,7 @@ async function deletePagesMany(indices) {
   state.lastClickedPage = null;
   state.selectionCursor = null;
   await persist();
-  toast(`${sources.length} ページを削除しました`);
+  toast(t('msg.deletedPages', {n: sources.length}));
 }
 
 // ============================================================================
@@ -1648,7 +1879,7 @@ async function rotatePages(angleDelta) {
     targets = bestIdx >= 0 ? [bestIdx] : [];
   }
   if (!targets || targets.length === 0) {
-    toast("回転するページがありません");
+    toast(t('msg.noRotatePage'));
     return;
   }
   for (const idx of targets) {
@@ -1665,9 +1896,10 @@ async function rotatePages(angleDelta) {
   state.lastClickedPage = preservedAnchor;
   state.selectionCursor = preservedCursor;
   updateThumbSelectionClass();
+  const dir = t(angleDelta > 0 ? 'dir.right' : 'dir.left');
   toast(targets.length === 1
-    ? `ページ ${targets[0] + 1} を${angleDelta > 0 ? "右" : "左"}回転`
-    : `${targets.length} ページを${angleDelta > 0 ? "右" : "左"}回転`);
+    ? t('msg.rotateOne', {n: targets[0] + 1, dir})
+    : t('msg.rotateMulti', {n: targets.length, dir}));
 }
 
 // ============================================================================
@@ -2130,7 +2362,7 @@ function openTextEditor(wrap, pageIdx, opts) {
   ta.setAttribute("autocorrect", "off");
   ta.setAttribute("spellcheck", "false");
   ta.rows = 1;
-  ta.placeholder = "テキスト (Enter で確定 / Shift+Enter で改行)";
+  ta.placeholder = t('ann.textPh');
   ta.value = opts.initialText || "";
   wrap.appendChild(ta);
 
@@ -2468,7 +2700,7 @@ function drawCommentAnnotation(ann, pageFrame, pageIdx, idx) {
   header.className = "cb-header";
   const title = document.createElement("span");
   title.className = "cb-title";
-  title.textContent = "コメント";
+  title.textContent = t('cmt.title');
   header.appendChild(title);
 
   const tools = document.createElement("div");
@@ -2476,19 +2708,19 @@ function drawCommentAnnotation(ann, pageFrame, pageIdx, idx) {
   const btnFsDec = document.createElement("button");
   btnFsDec.className = "cb-fs-dec";
   btnFsDec.textContent = "A−";
-  btnFsDec.title = "文字を小さく";
+  btnFsDec.title = t('cmt.fsDecTitle');
   const btnFsInc = document.createElement("button");
   btnFsInc.className = "cb-fs-inc";
   btnFsInc.textContent = "A+";
-  btnFsInc.title = "文字を大きく";
+  btnFsInc.title = t('cmt.fsIncTitle');
   const btnReply = document.createElement("button");
   btnReply.className = "cb-reply";
-  btnReply.textContent = "返信";
-  btnReply.title = "返信を追加";
+  btnReply.textContent = t('cmt.reply');
+  btnReply.title = t('cmt.replyTitle');
   const del = document.createElement("button");
   del.className = "cb-del";
   del.textContent = "×";
-  del.title = "コメントを削除";
+  del.title = t('cmt.delTitle');
   tools.appendChild(btnFsDec);
   tools.appendChild(btnFsInc);
   tools.appendChild(btnReply);
@@ -2509,7 +2741,7 @@ function drawCommentAnnotation(ann, pageFrame, pageIdx, idx) {
   // ---- Fill handle (bottom-right) ----
   const fillHandle = document.createElement("div");
   fillHandle.className = "cb-fill-handle";
-  fillHandle.title = "サイズ変更";
+  fillHandle.title = t('cmt.resizeTitle');
   box.appendChild(fillHandle);
 
   // Anchor the comment box INSIDE page-wrap so its position is relative to
@@ -2574,7 +2806,7 @@ function drawCommentAnnotation(ann, pageFrame, pageIdx, idx) {
     const rDel = document.createElement("button");
     rDel.className = "rb-del";
     rDel.textContent = "×";
-    rDel.title = "返信を削除";
+    rDel.title = t('cmt.replyDelTitle');
     rDel.addEventListener("pointerdown", e => e.stopPropagation());
     rDel.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -2623,7 +2855,7 @@ function drawCommentAnnotation(ann, pageFrame, pageIdx, idx) {
       const rb = replyDoms[i];
       rb.dataset.replyIndex = String(i);
       const lbl = rb.querySelector(".rb-label");
-      if (lbl) lbl.textContent = `返信 ${i + 1}`;
+      if (lbl) lbl.textContent = t('cmt.replyLabel', {n: i + 1});
       const bodyEl = rb.querySelector(".rb-body");
       // Only update DOM text when it actually differs, so the user's caret
       // isn't reset while they're typing.
@@ -3356,7 +3588,7 @@ function deleteAnnotationAt(pageIdx, idx) {
     }
   }
   drawAnnotationsForPage(pageIdx);
-  toast("注釈を削除");
+  toast(t('msg.annDeleted'));
 }
 
 function editTextAnnotation(pageIdx, idx) {
@@ -3391,11 +3623,12 @@ function updatePropertyPanel() {
   const ann = state.annotations[pageIdx][index];
   if (!ann) { hidePropertyPanel(); return; }
 
-  const titles = {
-    text: "テキスト", highlight: "ハイライト",
-    frame: "枠線", pen: "ペン", strikethrough: "取り消し線",
+  const titleKey = {
+    text: 'ann.title.text', highlight: 'ann.title.highlight',
+    frame: 'ann.title.frame', pen: 'ann.title.pen',
+    strikethrough: 'ann.title.strikethrough', comment: 'ann.title.comment',
   };
-  document.getElementById("prop-title").textContent = titles[ann.type] || "注釈";
+  document.getElementById("prop-title").textContent = t(titleKey[ann.type] || 'prop.title');
 
   document.getElementById("prop-color").value = ann.color || "#000000";
 
@@ -3486,7 +3719,7 @@ async function addPageNumbers({ position, format, fontSize, startNumber, skipPag
     font = await embedJpFont(state.pdfDoc);
   } catch (err) {
     console.warn("日本語フォント取得失敗、Helveticaを使用:", err);
-    toast("日本語フォント取得失敗 — Helveticaを使用", 3500);
+    toast(t('msg.fontFallback'), 3500);
     font = await state.pdfDoc.embedFont(StandardFonts.Helvetica);
   }
   const total = state.pdfDoc.getPageCount();
@@ -3509,7 +3742,7 @@ async function addPageNumbers({ position, format, fontSize, startNumber, skipPag
     counter++;
   });
   await persist();
-  toast("ページ番号を追加");
+  toast(t('msg.pageNumAdded'));
 }
 
 // ============================================================================
@@ -3527,7 +3760,7 @@ async function burnAnnotationsIntoPdf(doc) {
     fontIsJp = true;
   } catch (err) {
     console.warn("日本語フォント読み込み失敗、Helveticaにフォールバック:", err);
-    toast("日本語フォント読込失敗 — 英数字のみ保存", 4000);
+    toast(t('msg.fontFallbackExportOnly'), 4000);
     font = await doc.embedFont(StandardFonts.Helvetica);
   }
   // Helvetica only encodes Latin-1; helper to detect un-encodable chars.
@@ -3777,7 +4010,7 @@ async function burnAnnotationsIntoPdf(doc) {
             // Header label
             try {
               const labelSize = Math.max(fs * 0.8, 7);
-              page.drawText(`↳ 返信 ${rIdx + 1}`, {
+              page.drawText(t('msg.replyPdf', {n: rIdx + 1}), {
                 x: destRX + 4,
                 y: pageH - destRY - REPLY_HEAD_H_PT + (REPLY_HEAD_H_PT - labelSize) / 2,
                 size: labelSize,
@@ -3844,7 +4077,7 @@ async function burnAnnotationsIntoPdf(doc) {
     });
   });
   if (skipped > 0) {
-    toast(`${skipped} 個のテキスト注釈をスキップ (フォント未対応文字)`, 4500);
+    toast(t('msg.annSkipped', {n: skipped}), 4500);
   }
 }
 
@@ -3907,7 +4140,7 @@ fontSelectEl.addEventListener("change", (e) => {
   jpFontBytesCache = fontRegistry[idx].bytes || null;
   jpFontFetchPromise = null;
   jpFontSourceLabel = fontRegistry[idx].name;
-  toast(`フォント選択: ${fontRegistry[idx].name}`);
+  toast(t('msg.fontSelected', {name: fontRegistry[idx].name}));
 });
 document.getElementById("file-font").addEventListener("change", async e => {
   const file = e.target.files[0];
@@ -3916,7 +4149,7 @@ document.getElementById("file-font").addEventListener("change", async e => {
   try {
     await setJpFontFromFile(file);
   } catch (err) {
-    alert("フォントファイルの読み込みに失敗しました: " + err.message);
+    alert(t('msg.fontLoadFail', {err: err.message}));
   }
 });
 
@@ -3933,7 +4166,7 @@ async function setZoom(newScale, opts = {}) {
   const ratio = prevTop / prevTotal;
   await renderPages();
   viewer.scrollTop = ratio * (viewer.scrollHeight || 1);
-  if (!opts.quiet) toast(`ズーム: ${Math.round(VIEW_SCALE * 100 / 1.4)}% (表示倍率 ${(VIEW_SCALE).toFixed(2)}×)`);
+  if (!opts.quiet) toast(t('msg.zoom', {pct: Math.round(VIEW_SCALE * 100 / 1.4), scale: VIEW_SCALE.toFixed(2)}));
 }
 
 function updateZoomLabel() {
@@ -3951,7 +4184,7 @@ document.getElementById("btn-zoom-reset").addEventListener("click", () =>
   setZoom(ZOOM_DEFAULT));
 
 document.getElementById("btn-clear").addEventListener("click", async () => {
-  if (!confirm("現在のPDFをクリアしますか？")) return;
+  if (!confirm(t('msg.clearPdf'))) return;
   state.pdfDoc = null;
   state.pdfBytes = null;
   state.annotations = [];
@@ -4170,6 +4403,14 @@ viewer.addEventListener("drop", async e => {
     await imagesToPdf(imgs);
   }
 });
+
+// Language toggle
+document.getElementById('btn-lang').addEventListener('click', () => {
+  applyLang(_lang === 'ja' ? 'en' : 'ja');
+});
+
+// Initialize UI language (runs after all handlers are wired).
+initLang();
 </script>
 </body>
 </html>

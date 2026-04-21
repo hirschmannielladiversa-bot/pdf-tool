@@ -6,6 +6,34 @@
 
 ---
 
+## [1.4.0] — 2026-04-21
+
+**日英二言語対応 (JP / EN ランタイム切替) + 4 パッケージ配布**
+
+### Added
+- **JP / EN 言語トグルボタン** をツールバー右端に追加
+  クリックで日本語 ↔ 英語を即時切替。選択した言語は `localStorage` に保存され、
+  リロード後も維持される
+- **I18N 辞書** (`I18N.ja` / `I18N.en`) を実装。ツールバー・プロパティパネル・
+  ダイアログ・ウェルカム画面など全 UI をキー化
+- `data-default-lang` 属性でパッケージ別の初期言語を設定。URL パラメータ
+  (`?lang=ja|en`) によるオーバーライドにも対応
+- **英語版使い方ガイド** (`usage_guide.html`) を新規作成
+- 配布パッケージを 4 種類に拡充:
+  - `PDF_Tool_Mac_JP.zip` — Mac 日本語版 (エントリ: `本体：ダブルクリックで作動.html`)
+  - `PDF_Tool_Mac_EN.zip` — Mac 英語版 (エントリ: `PDF_Tool.html`)
+  - `PDF_Tool_Windows_JP.zip` — Windows 日本語版
+  - `PDF_Tool_Windows_EN.zip` — Windows 英語版
+  各 zip に対応言語の使い方ガイドと独立した SHA256SUMS.txt を同梱
+
+### Changed
+- `build_bundled.py` に `--lang {ja,en}` 引数を追加
+  `--lang en` 指定時は `pdf_tool_bundled_en.html` を生成し `data-default-lang="en"` を設定
+- `build_packages.py` を全面改修: 4 zip 生成 + zip ごとの SHA256SUMS.txt を自動生成
+- `使い方ガイド.html` のバージョン表記を v1.4.0 に更新し、英語版ガイドへの相互リンクを追加
+
+---
+
 ## [1.3.0] — 2026-04-19
 
 **注釈サイズのズーム不変化、取り消し線の二重線間隔調整、保存ボタン明示化、回転 UX 改善**
