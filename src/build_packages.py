@@ -7,7 +7,7 @@ build_packages.py — Produce OS-specific distribution zips (JP and EN).
      - pdf_tool_bundled_en.html    (English-default)
 2. Builds four zip packages in deploy/packages/:
      - PDF_Tool_Mac_JP.zip     (entry: 本体：ダブルクリックで作動.html, guide: 使い方ガイド.html)
-     - PDF_Tool_Mac_EN.zip     (entry: PDF_Tool.html,                  guide: usage_guide.html)
+     - PDF_Tool_Mac_EN.zip     (entry: Start_Here.html,                guide: usage_guide.html)
      - PDF_Tool_Windows_JP.zip (entry: pdf_tool_bundled.html,          guide: 使い方ガイド.html)
      - PDF_Tool_Windows_EN.zip (entry: pdf_tool_bundled.html,          guide: usage_guide.html)
    Each zip embeds its own SHA256SUMS.txt.
@@ -30,7 +30,11 @@ BUILD_BUNDLED_SCRIPT = ROOT / "src" / "build_bundled.py"
 # Excluded from Windows packages due to U+FF1A + NFD/NFC issues on Windows.
 MAC_FRIENDLY_FILENAME_JP = "本体：ダブルクリックで作動.html"
 # ASCII entry point for Mac EN package.
-MAC_FRIENDLY_FILENAME_EN = "PDF_Tool.html"
+# Named "Start_Here.html" (not "PDF_Tool.html") to avoid a case-insensitive
+# filename collision with pdf_tool.html (the lib-referencing variant) on
+# macOS APFS/HFS+ default configurations — one file would overwrite the
+# other on extraction.
+MAC_FRIENDLY_FILENAME_EN = "Start_Here.html"
 
 # Bundled single-file HTMLs per language (on disk in DEPLOY_DIR).
 BUNDLED_FILES = {
@@ -134,7 +138,7 @@ WINDOWS_README_TXT_EN = """PDF Tool — Windows version (offline single-file)
   The Mac version (PDF_Tool_Mac_EN.zip) and this Windows version are
   identical in content (HTML / JS / fonts) and functionality. The only
   difference is the entry filename:
-    Mac     -> PDF_Tool.html
+    Mac     -> Start_Here.html
     Windows -> pdf_tool_bundled.html
   The usage guide (usage_guide.html) is shared between both OS versions.
 
@@ -190,12 +194,18 @@ def zip_with_sha256(zip_path: Path, entries):
     """
     entries: list of (disk_path, arcname_in_zip)
     Computes per-zip SHA256SUMS.txt and embeds it as pdf_tool/SHA256SUMS.txt.
+    All listed files are required — missing files fail loudly.
     """
+    missing = [disk for disk, _ in entries if not disk.exists()]
+    if missing:
+        for m in missing:
+            print(f"  ERROR: required file missing: {m}", file=sys.stderr)
+        sys.exit(f"refusing to build {zip_path.name} with {len(missing)} missing file(s)")
+
     sha_lines = []
     for disk, arc in entries:
-        if disk.exists():
-            rel = arc.split("/", 1)[-1]  # strip leading 'pdf_tool/' folder
-            sha_lines.append(f"{sha256_file(disk)}  {rel}")
+        rel = arc.split("/", 1)[-1]  # strip leading 'pdf_tool/' folder
+        sha_lines.append(f"{sha256_file(disk)}  {rel}")
 
     sha_tmp = zip_path.parent / "_SHA256SUMS_tmp.txt"
     sha_tmp.write_text("\n".join(sha_lines) + "\n", encoding="utf-8")
@@ -206,9 +216,6 @@ def zip_with_sha256(zip_path: Path, entries):
     try:
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
             for disk, arc in entries:
-                if not disk.exists():
-                    print(f"  SKIP missing: {disk}")
-                    continue
                 zf.write(disk, arc)
             zf.write(sha_tmp, "pdf_tool/SHA256SUMS.txt")
     finally:
@@ -218,15 +225,19 @@ def zip_with_sha256(zip_path: Path, entries):
     print(f"  → {zip_path.name} ({zip_path.stat().st_size / (1024 * 1024):.2f} MB)")
 
 
-def _base_entries(lang: str):
-    """Returns (disk_path, arcname) entries shared by Mac and Windows packages."""
+def _base_entries():
+    """Returns (disk_path, arcname) entries shared by all four packages.
+
+    Both language guides are always bundled so the cross-link in each guide
+    resolves locally regardless of which package the user downloaded.
+    """
     entries = []
     # Common non-guide files
     for name in COMMON_FILES_BASE:
         entries.append((DEPLOY_DIR / name, f"pdf_tool/{name}"))
-    # Language-specific guide
-    guide = GUIDE_FILES[lang]
-    entries.append((DEPLOY_DIR / guide, f"pdf_tool/{guide}"))
+    # Both guides (JP + EN) — the cross-link inside each guide needs both.
+    for guide_name in GUIDE_FILES.values():
+        entries.append((DEPLOY_DIR / guide_name, f"pdf_tool/{guide_name}"))
     # lib/ assets
     for name in LIB_FILES:
         entries.append((LIB_DIR / name, f"pdf_tool/lib/{name}"))
@@ -239,7 +250,7 @@ def build_mac_zip(lang: str):
     print(f"[{step}/5] building Mac {label} zip …")
 
     bundled = BUNDLED_FILES[lang]
-    entries = _base_entries(lang)
+    entries = _base_entries()
     # Bundled file as pdf_tool_bundled.html (ASCII, always present)
     entries.append((bundled, "pdf_tool/pdf_tool_bundled.html"))
     # OS-friendly named entry
@@ -260,17 +271,17 @@ def build_windows_zip(lang: str):
     bundled = BUNDLED_FILES[lang]
     readme_txt = WINDOWS_README_TXT if lang == "ja" else WINDOWS_README_TXT_EN
 
-    readme_tmp = PACKAGES_DIR / "_README_Windows_tmp.txt"
     PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
-    readme_tmp.write_text(readme_txt, encoding="utf-8")
-
-    entries = _base_entries(lang)
-    entries.append((bundled, "pdf_tool/pdf_tool_bundled.html"))
-    # NOTE: intentionally NOT including the JP Mac-friendly filename
-    entries.append((readme_tmp, "pdf_tool/README_Windows.txt"))
-
-    zip_name = f"PDF_Tool_Windows_{label}.zip"
+    readme_tmp = PACKAGES_DIR / "_README_Windows_tmp.txt"
     try:
+        readme_tmp.write_text(readme_txt, encoding="utf-8")
+
+        entries = _base_entries()
+        entries.append((bundled, "pdf_tool/pdf_tool_bundled.html"))
+        # NOTE: intentionally NOT including the JP Mac-friendly filename
+        entries.append((readme_tmp, "pdf_tool/README_Windows.txt"))
+
+        zip_name = f"PDF_Tool_Windows_{label}.zip"
         zip_with_sha256(PACKAGES_DIR / zip_name, entries)
     finally:
         if readme_tmp.exists():

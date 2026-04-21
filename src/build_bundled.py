@@ -121,8 +121,13 @@ def build(lang: str = "ja") -> None:
 
     # 4. Apply language-specific default.
     if lang == "en":
+        old_html_tag = '<html lang="ja" data-default-lang="ja">'
+        if old_html_tag not in html:
+            print(f"ERROR: expected <html> tag not found: {old_html_tag}",
+                  file=sys.stderr)
+            sys.exit(1)
         html = html.replace(
-            '<html lang="ja" data-default-lang="ja">',
+            old_html_tag,
             '<html lang="en" data-default-lang="en">',
             1,
         )

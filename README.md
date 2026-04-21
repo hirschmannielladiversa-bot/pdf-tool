@@ -31,7 +31,7 @@ Grab the latest release from the [Releases](../../releases) page. Four packages 
 | Package | OS | Language | Entry file |
 |---|---|---|---|
 | `PDF_Tool_Mac_JP.zip` | Mac | Japanese | `本体：ダブルクリックで作動.html` |
-| `PDF_Tool_Mac_EN.zip` | Mac | English | `PDF_Tool.html` |
+| `PDF_Tool_Mac_EN.zip` | Mac | English | `Start_Here.html` |
 | `PDF_Tool_Windows_JP.zip` | Windows | Japanese | `pdf_tool_bundled.html` |
 | `PDF_Tool_Windows_EN.zip` | Windows | English | `pdf_tool_bundled.html` |
 

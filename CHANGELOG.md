@@ -21,7 +21,7 @@
 - **英語版使い方ガイド** (`usage_guide.html`) を新規作成
 - 配布パッケージを 4 種類に拡充:
   - `PDF_Tool_Mac_JP.zip` — Mac 日本語版 (エントリ: `本体：ダブルクリックで作動.html`)
-  - `PDF_Tool_Mac_EN.zip` — Mac 英語版 (エントリ: `PDF_Tool.html`)
+  - `PDF_Tool_Mac_EN.zip` — Mac 英語版 (エントリ: `Start_Here.html`)
   - `PDF_Tool_Windows_JP.zip` — Windows 日本語版
   - `PDF_Tool_Windows_EN.zip` — Windows 英語版
   各 zip に対応言語の使い方ガイドと独立した SHA256SUMS.txt を同梱
