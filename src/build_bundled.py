@@ -109,13 +109,6 @@ def build() -> None:
     html = html.replace(old_url_line, f'"{ttf_data_url}",', 1)
     print(f"  inlined TTF ({len(ttf_b64):,} b64 chars)")
 
-    # 4. Title tweak so the bundled tab label distinguishes from the lib version.
-    html = html.replace(
-        "<title>PDF Tool — クライアントサイド版 (オフライン)</title>",
-        "<title>PDF Tool — クライアントサイド版 (単一ファイル / オフライン)</title>",
-        1,
-    )
-
     OUT_HTML.write_text(html, encoding="utf-8")
     size_mb = len(html.encode("utf-8")) / (1024 * 1024)
     print(f"✓ wrote {OUT_HTML} ({size_mb:.2f} MB)")
