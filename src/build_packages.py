@@ -59,6 +59,7 @@ LIB_FILES = [
     "pdf.min.js",
     "pdf-lib.min.js",
     "fontkit.umd.min.js",
+    "jszip.min.js",
     "pdf.worker.min.js",
     "SawarabiGothic-Regular.ttf",
 ]
@@ -93,6 +94,8 @@ WINDOWS_README_TXT = """PDF Tool — Windows 版 (オフライン単一ファイ
     吹き出しが出現。ドラッグで位置調整、フィルハンドルでサイズ変更、
     A-/A+ ボタンで文字サイズ、「返信」ボタンで返信サブウィンドウを追加
   - ページ番号挿入、画像 → PDF 変換、PDF 結合
+  - PDF 分割: 「分割」ボタンでページ範囲 (例: 1-3, 4-10, 11-) を指定し、
+    範囲ごとの PDF をまとめて ZIP でダウンロード (元の編集中 PDF は変更されません)
   - 複数ページ選択: サムネイルを Shift+クリック / Ctrl+クリック で複数選択し、
     まとめてドラッグ、Shift+←/→ で範囲を広げる、←/→ (Shift なし) で
     選択中ページをまとめて1ステップずつ移動
@@ -148,6 +151,9 @@ WINDOWS_README_TXT_EN = """PDF Tool — Windows version (offline single-file)
     -> a callout appears to the right. Drag to reposition, use the fill handle
     to resize, A-/A+ to change font size, "Reply" to add reply sub-cards
   - Insert page numbers, convert images to PDF, merge PDFs
+  - Split PDF: click "Split", enter page ranges (e.g. 1-3, 4-10, 11-), and
+    download all resulting PDFs bundled in one zip (the PDF you're editing
+    is left unchanged)
   - Multi-page select: Shift+click / Ctrl+click thumbnails to select multiple
     pages; drag to reorder, Shift+<-/-> to extend selection, <-/-> (no Shift)
     to move selected pages one step at a time

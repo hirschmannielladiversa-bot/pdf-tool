@@ -5,12 +5,14 @@ of the PDF Tool editor by inlining all lib/ dependencies into pdf_tool.html.
 
 Inputs  : deploy/pdf_tool/pdf_tool.html
           deploy/pdf_tool/lib/{pdf.min.js, pdf-lib.min.js, fontkit.umd.min.js,
-                               pdf.worker.min.js, SawarabiGothic-Regular.ttf}
+                               jszip.min.js, pdf.worker.min.js,
+                               SawarabiGothic-Regular.ttf}
 Output  : deploy/pdf_tool/pdf_tool_bundled.html    (--lang ja, default)
           deploy/pdf_tool/pdf_tool_bundled_en.html  (--lang en)
 
 Inlining strategy:
-  - pdf.min.js, pdf-lib.min.js, fontkit.umd.min.js   → inlined as <script>…</script>
+  - pdf.min.js, pdf-lib.min.js, fontkit.umd.min.js,
+    jszip.min.js                                     → inlined as <script>…</script>
   - pdf.worker.min.js                                → base64-embedded + Blob URL
   - SawarabiGothic-Regular.ttf                       → base64 data URL
 
@@ -41,6 +43,7 @@ INLINE_SCRIPTS = [
     ("lib/pdf.min.js", "pdf.min.js"),
     ("lib/pdf-lib.min.js", "pdf-lib.min.js"),
     ("lib/fontkit.umd.min.js", "fontkit.umd.min.js"),
+    ("lib/jszip.min.js", "jszip.min.js"),
 ]
 WORKER_FILE = "pdf.worker.min.js"
 TTF_FILE = "SawarabiGothic-Regular.ttf"
