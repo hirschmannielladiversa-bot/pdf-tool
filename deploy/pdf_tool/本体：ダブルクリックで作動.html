@@ -787,6 +787,47 @@ html, body {
   box-shadow: 0 12px 48px rgba(0,0,0,0.6);
 }
 .modal h3 { margin: 0 0 16px; font-size: 16px; }
+#split-modal .modal { width: min(90vw, 720px); }
+.split-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-top: 10px;
+  padding: 4px;
+  background: var(--bg-strip);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.split-thumb {
+  flex-shrink: 0;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  opacity: 0.35;
+  transition: opacity 0.12s, border-color 0.12s;
+}
+.split-thumb img {
+  width: 46px;
+  height: 60px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 2px;
+  display: block;
+}
+.split-thumb.in-range { opacity: 1; }
+.split-thumb-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+}
 .modal label {
   display: flex;
   align-items: center;
@@ -940,6 +981,7 @@ html, body {
     </label>
     <p id="split-hint" style="margin:4px 0 0;font-size:12px;color:var(--muted)"></p>
     <p id="split-error" style="margin:8px 0 0;font-size:12px;color:var(--danger);display:none"></p>
+    <div class="split-thumbs" id="split-thumbs"></div>
     <div class="modal-buttons">
       <button class="tb-btn" id="split-cancel" data-i18n="modal.split.cancel">キャンセル</button>
       <button class="tb-btn primary" id="split-ok" data-i18n="modal.split.ok">分割してダウンロード</button>
@@ -4357,6 +4399,75 @@ function parseRangeSpec(spec, totalPages) {
   return ranges;
 }
 
+// Lenient variant of parseRangeSpec used only for the live thumbnail preview:
+// malformed or out-of-range tokens (including a range still being typed) are
+// silently skipped instead of throwing, so the preview never errors out
+// while the user is mid-keystroke.
+function previewRangeSpec(spec, totalPages) {
+  const tokens = (spec || "").split(",").map(s => s.trim()).filter(s => s.length > 0);
+  const ranges = [];
+  for (const tok of tokens) {
+    let m;
+    if ((m = tok.match(/^(\d+)-(\d+)$/))) {
+      const start = parseInt(m[1], 10), end = parseInt(m[2], 10);
+      if (start >= 1 && end <= totalPages && start <= end) ranges.push({start, end});
+    } else if ((m = tok.match(/^(\d+)-$/))) {
+      const start = parseInt(m[1], 10);
+      if (start >= 1 && start <= totalPages) ranges.push({start, end: totalPages});
+    } else if ((m = tok.match(/^(\d+)$/))) {
+      const n = parseInt(m[1], 10);
+      if (n >= 1 && n <= totalPages) ranges.push({start: n, end: n});
+    }
+  }
+  return ranges;
+}
+
+const SPLIT_THUMB_COLORS = ["#4a9eff", "#ff8800", "#20c060", "#ff5a5a", "#c060ff", "#ffd000"];
+
+// Builds the page-thumbnail strip shown inside the split dialog, reusing the
+// already-rendered canvases from the main thumbnail strip (no re-render).
+function buildSplitThumbs() {
+  const container = document.getElementById("split-thumbs");
+  container.innerHTML = "";
+  const stripThumbs = strip.querySelectorAll(".thumb");
+  stripThumbs.forEach((srcThumb, i) => {
+    const div = document.createElement("div");
+    div.className = "split-thumb";
+    const canvas = srcThumb.querySelector("canvas");
+    if (canvas) {
+      const img = document.createElement("img");
+      img.src = canvas.toDataURL();
+      div.appendChild(img);
+    }
+    const label = document.createElement("div");
+    label.className = "split-thumb-label";
+    label.textContent = String(i + 1);
+    div.appendChild(label);
+    container.appendChild(div);
+  });
+}
+
+// Colors each split-thumb by which range (if any) its page currently falls
+// into, so the user can see the split boundaries while typing.
+function updateSplitThumbHighlight() {
+  if (!state.pdfDoc) return;
+  const totalPages = state.pdfDoc.getPageCount();
+  const ranges = previewRangeSpec(document.getElementById("split-ranges").value, totalPages);
+  const pageRangeIdx = new Array(totalPages + 1).fill(-1);
+  ranges.forEach((r, i) => {
+    for (let p = r.start; p <= r.end; p++) {
+      if (pageRangeIdx[p] === -1) pageRangeIdx[p] = i;
+    }
+  });
+  const thumbs = document.querySelectorAll("#split-thumbs .split-thumb");
+  thumbs.forEach((el, idx) => {
+    const rIdx = pageRangeIdx[idx + 1];
+    const inRange = rIdx !== -1;
+    el.classList.toggle("in-range", inRange);
+    el.style.borderColor = inRange ? SPLIT_THUMB_COLORS[rIdx % SPLIT_THUMB_COLORS.length] : "transparent";
+  });
+}
+
 // Splits the current PDF (with annotations burned in, same as downloadPdf)
 // into one file per range, bundled into a single zip download.
 async function splitPdf(spec) {
@@ -4560,9 +4671,12 @@ document.getElementById("btn-split").addEventListener("click", () => {
   if (!state.pdfDoc) return;
   splitErrorEl.style.display = "none";
   splitHintEl.textContent = t('msg.splitHint', {n: state.pdfDoc.getPageCount()});
+  buildSplitThumbs();
+  updateSplitThumbHighlight();
   splitModal.classList.add("show");
   splitRangesInput.focus();
 });
+splitRangesInput.addEventListener("input", updateSplitThumbHighlight);
 document.getElementById("split-cancel").addEventListener("click", () => splitModal.classList.remove("show"));
 document.getElementById("split-ok").addEventListener("click", async () => {
   splitErrorEl.style.display = "none";
